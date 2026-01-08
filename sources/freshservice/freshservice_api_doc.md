@@ -10,12 +10,14 @@
 
 **How to obtain API Key**:
 1. Log in to your Freshservice account
-2. Navigate to **Profile Settings** → **API Settings**
-3. Your API key will be displayed (or you can generate a new one)
+2. Click on your profile picture in the top-right corner
+3. Navigate to **Profile Settings**
+4. Your API key will be displayed under "Your API Key" section
 
 **Required permissions**:
 - The API key inherits the permissions of the user account it belongs to
-- For read-only ticket access, the user needs at least **Agent** role with ticket viewing permissions
+- For read-only access, the user needs at least **Agent** role with appropriate viewing permissions
+- Admin access is required for some configuration endpoints
 
 Example authenticated request:
 
@@ -39,30 +41,70 @@ Notes:
 - Replace `<your_domain>` with your Freshservice subdomain (e.g., `acme` for `acme.freshservice.com`)
 - Rate limiting varies by plan (see Rate Limits section)
 - All API responses are in JSON format
+- API V1 was deprecated on May 31, 2023; use API V2 only
 
 
 ## **Object List**
 
-For connector purposes, we treat specific Freshservice REST resources as **objects/tables**.
-The object list is **static** (defined by the connector), not discovered dynamically from an API.
+The Freshservice API provides access to various objects for IT Service Management (ITSM). The object list is **static** (defined by the connector), not discovered dynamically from an API.
+
+### Core ITSM Objects
 
 | Object Name | Description | Primary Endpoint | Ingestion Type |
 |------------|-------------|------------------|----------------|
-| `tickets` | Support tickets (incidents and service requests) | `GET /api/v2/tickets` | `cdc` (upserts based on `updated_at`) |
+| `tickets` | Support tickets (incidents and service requests) | `GET /api/v2/tickets` | `cdc` |
+| `problems` | Problem records linked to incidents | `GET /api/v2/problems` | `cdc` |
+| `changes` | Change management requests | `GET /api/v2/changes` | `cdc` |
+| `releases` | Release management records | `GET /api/v2/releases` | `cdc` |
 
-**Connector scope for initial implementation**:
-- Step 1 focuses on the `tickets` object and documents it in detail.
-- Other objects (agents, requesters, departments, groups, assets, problems, changes, releases) can be added in future extensions.
+### User & Organization Objects
 
-**Additional objects available in Freshservice (for future extension)**:
-
-| Object Name | Description | Primary Endpoint | Ingestion Type (planned) |
-|------------|-------------|------------------|--------------------------|
-| `agents` | Support agents in the helpdesk | `GET /api/v2/agents` | `snapshot` |
-| `requesters` | Users who submit tickets | `GET /api/v2/requesters` | `cdc` (TBD) |
-| `departments` | Organizational departments | `GET /api/v2/departments` | `snapshot` |
+| Object Name | Description | Primary Endpoint | Ingestion Type |
+|------------|-------------|------------------|----------------|
+| `agents` | Support agents handling tickets | `GET /api/v2/agents` | `cdc` |
+| `requesters` | End-users who raise tickets | `GET /api/v2/requesters` | `cdc` |
 | `groups` | Agent groups for ticket assignment | `GET /api/v2/groups` | `snapshot` |
-| `ticket_fields` | Custom and standard ticket field definitions | `GET /api/v2/ticket_fields` | `snapshot` |
+| `departments` | Organizational departments | `GET /api/v2/departments` | `snapshot` |
+| `roles` | Agent roles with permissions | `GET /api/v2/roles` | `snapshot` |
+
+### Asset Management Objects
+
+| Object Name | Description | Primary Endpoint | Ingestion Type |
+|------------|-------------|------------------|----------------|
+| `assets` | IT assets (hardware, software, etc.) | `GET /api/v2/assets` | `cdc` |
+| `software` | Software installations | `GET /api/v2/applications` | `snapshot` |
+| `products` | Product catalog | `GET /api/v2/products` | `snapshot` |
+| `vendors` | Vendor information | `GET /api/v2/vendors` | `snapshot` |
+| `contracts` | Contracts with vendors | `GET /api/v2/contracts` | `snapshot` |
+| `purchase_orders` | Purchase orders | `GET /api/v2/purchase_orders` | `cdc` |
+
+### Service Catalog & Knowledge Base
+
+| Object Name | Description | Primary Endpoint | Ingestion Type |
+|------------|-------------|------------------|----------------|
+| `service_catalog_items` | Service items offered to users | `GET /api/v2/service_catalog/items` | `snapshot` |
+| `solutions` | Knowledge base articles | `GET /api/v2/solutions/articles` | `cdc` |
+| `solution_categories` | Knowledge base categories | `GET /api/v2/solutions/categories` | `snapshot` |
+| `solution_folders` | Knowledge base folders | `GET /api/v2/solutions/folders` | `snapshot` |
+
+### Supporting Objects
+
+| Object Name | Description | Primary Endpoint | Ingestion Type |
+|------------|-------------|------------------|----------------|
+| `locations` | Physical office locations | `GET /api/v2/locations` | `snapshot` |
+| `time_entries` | Time logs for tickets | `GET /api/v2/tickets/{id}/time_entries` | `append` |
+| `conversations` | Ticket conversations (notes/replies) | `GET /api/v2/tickets/{id}/conversations` | `append` |
+| `tasks` | Tasks associated with tickets/changes/problems | `GET /api/v2/tickets/{id}/tasks` | `cdc` |
+| `announcements` | Broadcast messages to users | `GET /api/v2/announcements` | `snapshot` |
+
+### Configuration Objects
+
+| Object Name | Description | Primary Endpoint | Ingestion Type |
+|------------|-------------|------------------|----------------|
+| `ticket_fields` | Ticket field definitions | `GET /api/v2/ticket_fields` | `snapshot` |
+| `sla_policies` | SLA policy definitions | `GET /api/v2/sla_policies` | `snapshot` |
+| `business_hours` | Business hours configuration | `GET /api/v2/business_hours` | `snapshot` |
+| `canned_responses` | Pre-defined response templates | `GET /api/v2/canned_responses` | `snapshot` |
 
 
 ## **Object Schema**
@@ -73,549 +115,1045 @@ The object list is **static** (defined by the connector), not discovered dynamic
 - For the connector, we define **tabular schemas** per object, derived from the JSON representation.
 - Nested JSON objects (e.g., `attachments`, `custom_fields`) are modeled as **nested structures/arrays** rather than being fully flattened.
 
-### `tickets` object (primary table)
+---
 
-**Source endpoint**:
-`GET /api/v2/tickets`
+### `tickets` object
+
+**Source endpoint**: `GET /api/v2/tickets`
 
 **Key behavior**:
 - Returns both incidents and service requests.
-- Supports filtering via `filter` predefined filters, `query` custom queries, and `updated_since` for incremental reads.
-- Pagination is handled via `page` and `per_page` parameters.
+- Supports filtering via `filter`, `query`, and `updated_since` parameters.
+- Pagination via `page` and `per_page` parameters.
 
-**High-level schema (connector view)**:
-
-Top-level fields (all from the Freshservice REST API):
+**Schema**:
 
 | Column Name | Type | Description |
 |------------|------|-------------|
 | `id` | integer (64-bit) | Unique identifier for the ticket. |
-| `workspace_id` | integer (64-bit) or null | ID of the workspace to which the ticket belongs. Applicable only to accounts with workspaces enabled. |
+| `workspace_id` | integer (64-bit) or null | ID of the workspace (for multi-workspace accounts). |
 | `subject` | string | Subject or title of the ticket. |
 | `description` | string or null | HTML content describing the ticket/issue. |
 | `description_text` | string or null | Plain text version of the ticket description. |
 | `type` | string or null | Category of the ticket (e.g., `Incident`, `Service Request`). |
-| `status` | integer | Current status of the ticket. See enumerated values below. |
-| `priority` | integer | Priority level of the ticket. See enumerated values below. |
-| `source` | integer | Channel through which the ticket was created. See enumerated values below. |
-| `requester_id` | integer (64-bit) | User ID of the individual who raised the ticket. |
-| `responder_id` | integer (64-bit) or null | ID of the agent assigned to respond to the ticket. |
-| `group_id` | integer (64-bit) or null | ID of the group to which the ticket is assigned. |
-| `department_id` | integer (64-bit) or null | ID of the department associated with the ticket. |
-| `company_id` | integer (64-bit) or null | ID of the company associated with the ticket. |
-| `product_id` | integer (64-bit) or null | ID of the product associated with the ticket. |
-| `category` | string or null | Primary classification/category of the ticket. |
-| `sub_category` | string or null | Secondary classification under the main category. |
-| `item_category` | string or null | Tertiary classification under the sub-category. |
-| `impact` | integer or null | Impact level of the ticket (for incident tickets). |
-| `urgency` | integer or null | Urgency level of the ticket (for incident tickets). |
-| `due_by` | string (ISO 8601 datetime) or null | Date and time by which the ticket is due to be resolved. |
-| `fr_due_by` | string (ISO 8601 datetime) or null | Date and time by which the first response is due. |
-| `is_escalated` | boolean | Indicates if the ticket has been escalated for SLA breach. |
-| `fr_escalated` | boolean or null | Indicates if the first response time has been escalated. |
-| `spam` | boolean | Indicates if the ticket has been marked as spam. |
-| `deleted` | boolean | Indicates if the ticket has been deleted/trashed. |
-| `email` | string or null | Email address of the requester. |
-| `phone` | string or null | Phone number of the requester. |
-| `email_config_id` | integer (64-bit) or null | ID of the email configuration used for the ticket. |
-| `sla_policy_id` | integer (64-bit) or null | ID of the SLA policy associated with the ticket. |
-| `cc_emails` | array\<string\> | Email addresses added in the 'cc' field of the incoming ticket email. |
-| `fwd_emails` | array\<string\> | Email addresses to which the ticket was forwarded. |
-| `reply_cc_emails` | array\<string\> | Email addresses added in the 'cc' field of ticket replies. |
-| `to_emails` | array\<string\> | Email addresses in the 'to' field of the incoming ticket email. |
-| `attachments` | array\<struct\> | Files attached to the ticket. Total size cannot exceed 40 MB. |
-| `custom_fields` | struct (map) | Key-value pairs containing custom field data defined in the account. |
-| `tags` | array\<string\> | Tags associated with the ticket. |
-| `created_at` | string (ISO 8601 datetime) | Timestamp when the ticket was created. |
-| `updated_at` | string (ISO 8601 datetime) | Timestamp when the ticket was last updated. Used as incremental cursor. |
-
-**Nested `attachments` struct** (elements of `attachments` array):
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | integer (64-bit) | Unique identifier for the attachment. |
-| `name` | string | Name of the attached file. |
-| `content_type` | string | MIME type of the attachment. |
-| `size` | integer | Size of the attachment in bytes. |
-| `created_at` | string (ISO 8601 datetime) | Timestamp when the attachment was created. |
-| `updated_at` | string (ISO 8601 datetime) | Timestamp when the attachment was last updated. |
-| `attachment_url` | string | URL to download the attachment. |
+| `status` | integer | Current status of the ticket. |
+| `priority` | integer | Priority level of the ticket. |
+| `source` | integer | Channel through which the ticket was created. |
+| `requester_id` | integer (64-bit) | User ID of the requester. |
+| `responder_id` | integer (64-bit) or null | ID of the assigned agent. |
+| `group_id` | integer (64-bit) or null | ID of the assigned group. |
+| `department_id` | integer (64-bit) or null | ID of the associated department. |
+| `company_id` | integer (64-bit) or null | ID of the associated company. |
+| `product_id` | integer (64-bit) or null | ID of the associated product. |
+| `category` | string or null | Primary classification/category. |
+| `sub_category` | string or null | Secondary classification. |
+| `item_category` | string or null | Tertiary classification. |
+| `impact` | integer or null | Impact level (for incidents). |
+| `urgency` | integer or null | Urgency level (for incidents). |
+| `due_by` | string (ISO 8601 datetime) or null | Resolution due date. |
+| `fr_due_by` | string (ISO 8601 datetime) or null | First response due date. |
+| `is_escalated` | boolean | Indicates SLA escalation. |
+| `fr_escalated` | boolean or null | Indicates first response escalation. |
+| `spam` | boolean | Indicates if marked as spam. |
+| `deleted` | boolean | Indicates if deleted/trashed. |
+| `email` | string or null | Requester's email address. |
+| `phone` | string or null | Requester's phone number. |
+| `email_config_id` | integer (64-bit) or null | Email configuration ID. |
+| `sla_policy_id` | integer (64-bit) or null | SLA policy ID. |
+| `cc_emails` | array\<string\> | CC email addresses. |
+| `fwd_emails` | array\<string\> | Forwarded email addresses. |
+| `reply_cc_emails` | array\<string\> | Reply CC email addresses. |
+| `to_emails` | array\<string\> | To email addresses. |
+| `attachments` | array\<struct\> | Attached files. |
+| `custom_fields` | struct (map) | Custom field key-value pairs. |
+| `tags` | array\<string\> | Associated tags. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp (cursor field). |
 
 **Enumerated Values**:
 
-**Status**:
-| Value | Label |
-|-------|-------|
-| 2 | Open |
-| 3 | Pending |
-| 4 | Resolved |
-| 5 | Closed |
+| Field | Value | Label |
+|-------|-------|-------|
+| status | 2 | Open |
+| status | 3 | Pending |
+| status | 4 | Resolved |
+| status | 5 | Closed |
+| priority | 1 | Low |
+| priority | 2 | Medium |
+| priority | 3 | High |
+| priority | 4 | Urgent |
+| source | 1 | Email |
+| source | 2 | Portal |
+| source | 3 | Phone |
+| source | 4 | Chat |
+| source | 5 | Feedback widget |
+| source | 6 | Yammer |
+| source | 7 | AWS Cloudwatch |
+| source | 8 | Pagerduty |
+| source | 9 | Walkup |
+| source | 10 | Slack |
+| source | 11 | Chatbot |
+| source | 12 | Workplace |
+| source | 13 | Employee Onboarding |
+| source | 14 | Alerts |
+| source | 15 | MS Teams |
+| source | 18 | Employee Offboarding |
+| impact | 1 | Low |
+| impact | 2 | Medium |
+| impact | 3 | High |
+| urgency | 1 | Low |
+| urgency | 2 | Medium |
+| urgency | 3 | High |
 
-Note: Custom statuses can be defined in Freshservice and will have different numeric values.
+---
 
-**Priority**:
-| Value | Label |
-|-------|-------|
-| 1 | Low |
-| 2 | Medium |
-| 3 | High |
-| 4 | Urgent |
+### `agents` object
 
-**Source**:
-| Value | Label |
-|-------|-------|
-| 1 | Email |
-| 2 | Portal |
-| 3 | Phone |
-| 4 | Chat |
-| 5 | Feedback widget |
-| 6 | Yammer |
-| 7 | AWS Cloudwatch |
-| 8 | Pagerduty |
-| 9 | Walkup |
-| 10 | Slack |
-| 11 | Chatbot |
-| 12 | Workplace |
-| 13 | Employee Onboarding |
-| 14 | Alerts |
-| 15 | MS Teams |
-| 18 | Employee Offboarding |
+**Source endpoint**: `GET /api/v2/agents`
 
-**Impact** (for incidents):
-| Value | Label |
-|-------|-------|
-| 1 | Low |
-| 2 | Medium |
-| 3 | High |
+**Schema**:
 
-**Urgency** (for incidents):
-| Value | Label |
-|-------|-------|
-| 1 | Low |
-| 2 | Medium |
-| 3 | High |
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the agent. |
+| `first_name` | string | First name of the agent. |
+| `last_name` | string or null | Last name of the agent. |
+| `email` | string | Primary email address of the agent. |
+| `job_title` | string or null | Job title of the agent. |
+| `phone` | string or null | Phone number of the agent. |
+| `mobile_phone_number` | string or null | Mobile phone number. |
+| `department_ids` | array\<integer\> | IDs of departments the agent belongs to. |
+| `reporting_manager_id` | integer (64-bit) or null | ID of the reporting manager. |
+| `address` | string or null | Address of the agent. |
+| `time_zone` | string or null | Time zone of the agent. |
+| `time_format` | string or null | Time format preference. |
+| `language` | string or null | Language preference. |
+| `location_id` | integer (64-bit) or null | ID of the agent's location. |
+| `background_information` | string or null | Background information. |
+| `scoreboard_level_id` | integer or null | Gamification scoreboard level. |
+| `member_of` | array\<integer\> | Group IDs the agent is a member of. |
+| `observer_of` | array\<integer\> | Group IDs the agent is an observer of. |
+| `role_ids` | array\<integer\> | IDs of roles assigned to the agent. |
+| `active` | boolean | Indicates if the agent is active. |
+| `occasional` | boolean | Indicates if the agent is an occasional agent. |
+| `signature` | string or null | Email signature. |
+| `custom_fields` | struct (map) | Custom field key-value pairs. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
 
-**Example request**:
+---
 
-```bash
-curl -X GET \
-  -u "<API_KEY>:X" \
-  -H "Content-Type: application/json" \
-  "https://<your_domain>.freshservice.com/api/v2/tickets?per_page=30"
-```
+### `requesters` object
 
-**Example response**:
+**Source endpoint**: `GET /api/v2/requesters`
 
-```json
-{
-  "tickets": [
-    {
-      "id": 1,
-      "workspace_id": 1,
-      "subject": "Support Needed...",
-      "description": "<div>Details about the issue...</div>",
-      "description_text": "Details about the issue...",
-      "type": "Incident",
-      "status": 2,
-      "priority": 2,
-      "source": 2,
-      "requester_id": 1000000001,
-      "responder_id": 1000000002,
-      "group_id": 1000000003,
-      "department_id": null,
-      "company_id": null,
-      "category": "Hardware",
-      "sub_category": "Laptop",
-      "item_category": null,
-      "impact": 2,
-      "urgency": 2,
-      "due_by": "2025-01-15T12:00:00Z",
-      "fr_due_by": "2025-01-14T12:00:00Z",
-      "is_escalated": false,
-      "fr_escalated": false,
-      "spam": false,
-      "deleted": false,
-      "email_config_id": null,
-      "cc_emails": [],
-      "fwd_emails": [],
-      "reply_cc_emails": [],
-      "to_emails": null,
-      "attachments": [],
-      "custom_fields": {
-        "cf_employee_id": "EMP001"
-      },
-      "tags": ["hardware", "laptop"],
-      "created_at": "2025-01-10T09:00:00Z",
-      "updated_at": "2025-01-10T10:30:00Z"
-    }
-  ]
-}
-```
+**Schema**:
 
-> The columns listed above define the **complete connector schema** for the `tickets` table.
-> If additional Freshservice ticket fields are needed in the future, they must be added as new columns here so the documentation continues to reflect the full table schema.
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the requester. |
+| `first_name` | string | First name of the requester. |
+| `last_name` | string or null | Last name of the requester. |
+| `primary_email` | string | Primary email address. |
+| `secondary_emails` | array\<string\> | Secondary email addresses. |
+| `job_title` | string or null | Job title of the requester. |
+| `phone` | string or null | Phone number. |
+| `mobile_phone_number` | string or null | Mobile phone number. |
+| `department_ids` | array\<integer\> | IDs of departments the requester belongs to. |
+| `reporting_manager_id` | integer (64-bit) or null | ID of the reporting manager. |
+| `address` | string or null | Address of the requester. |
+| `time_zone` | string or null | Time zone. |
+| `time_format` | string or null | Time format preference. |
+| `language` | string or null | Language preference. |
+| `location_id` | integer (64-bit) or null | ID of the requester's location. |
+| `background_information` | string or null | Background information. |
+| `can_see_all_tickets_from_associated_departments` | boolean | Permission flag. |
+| `active` | boolean | Indicates if the requester is active. |
+| `vip_user` | boolean | Indicates if the requester is a VIP. |
+| `custom_fields` | struct (map) | Custom field key-value pairs. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `groups` object
+
+**Source endpoint**: `GET /api/v2/groups`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the group. |
+| `name` | string | Name of the group. |
+| `description` | string or null | Description of the group. |
+| `escalate_to` | integer (64-bit) or null | ID of the group to escalate to. |
+| `unassigned_for` | string or null | Auto-escalation time for unassigned tickets. |
+| `business_hours_id` | integer (64-bit) or null | ID of the associated business hours. |
+| `agent_ids` | array\<integer\> | IDs of agents in the group. |
+| `members` | array\<integer\> | IDs of member agents. |
+| `observers` | array\<integer\> | IDs of observer agents. |
+| `leaders` | array\<integer\> | IDs of group leaders. |
+| `auto_ticket_assign` | boolean | Indicates if auto-assignment is enabled. |
+| `restricted` | boolean | Indicates if the group is restricted. |
+| `approval_required` | boolean | Indicates if approval is required. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `departments` object
+
+**Source endpoint**: `GET /api/v2/departments`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the department. |
+| `name` | string | Name of the department. |
+| `description` | string or null | Description of the department. |
+| `head_user_id` | integer (64-bit) or null | ID of the department head. |
+| `prime_user_id` | integer (64-bit) or null | ID of the primary contact. |
+| `domains` | array\<string\> | Email domains associated with the department. |
+| `custom_fields` | struct (map) | Custom field key-value pairs. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `assets` object
+
+**Source endpoint**: `GET /api/v2/assets`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the asset. |
+| `display_id` | integer | Display ID of the asset. |
+| `name` | string | Name of the asset. |
+| `description` | string or null | Description of the asset. |
+| `asset_type_id` | integer (64-bit) | ID of the asset type. |
+| `impact` | string or null | Impact level of the asset. |
+| `author_type` | string or null | Type of author who created the asset. |
+| `usage_type` | string or null | Usage type of the asset. |
+| `asset_tag` | string or null | Asset tag identifier. |
+| `user_id` | integer (64-bit) or null | ID of the user associated with the asset. |
+| `department_id` | integer (64-bit) or null | ID of the department owning the asset. |
+| `location_id` | integer (64-bit) or null | ID of the asset's location. |
+| `agent_id` | integer (64-bit) or null | ID of the agent managing the asset. |
+| `group_id` | integer (64-bit) or null | ID of the group managing the asset. |
+| `assigned_on` | string (ISO 8601 datetime) or null | Date when the asset was assigned. |
+| `end_of_life` | string (date) or null | End of life date. |
+| `discovery_enabled` | boolean | Indicates if discovery is enabled. |
+| `type_fields` | struct (map) | Type-specific fields. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `problems` object
+
+**Source endpoint**: `GET /api/v2/problems`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the problem. |
+| `workspace_id` | integer (64-bit) or null | ID of the workspace. |
+| `agent_id` | integer (64-bit) or null | ID of the assigned agent. |
+| `group_id` | integer (64-bit) or null | ID of the assigned group. |
+| `description` | string or null | HTML description of the problem. |
+| `description_text` | string or null | Plain text description. |
+| `requester_id` | integer (64-bit) | ID of the requester. |
+| `subject` | string | Subject of the problem. |
+| `status` | integer | Current status. |
+| `priority` | integer | Priority level. |
+| `impact` | integer | Impact level. |
+| `known_error` | boolean | Indicates if this is a known error. |
+| `due_by` | string (ISO 8601 datetime) or null | Due date for resolution. |
+| `department_id` | integer (64-bit) or null | ID of the associated department. |
+| `category` | string or null | Category of the problem. |
+| `sub_category` | string or null | Sub-category. |
+| `item_category` | string or null | Item category. |
+| `analysis_fields` | struct or null | Root cause analysis fields. |
+| `custom_fields` | struct (map) | Custom field key-value pairs. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+**Enumerated Values**:
+
+| Field | Value | Label |
+|-------|-------|-------|
+| status | 1 | Open |
+| status | 2 | Change Requested |
+| status | 3 | Closed |
+| priority | 1 | Low |
+| priority | 2 | Medium |
+| priority | 3 | High |
+| priority | 4 | Urgent |
+| impact | 1 | Low |
+| impact | 2 | Medium |
+| impact | 3 | High |
+
+---
+
+### `changes` object
+
+**Source endpoint**: `GET /api/v2/changes`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the change. |
+| `workspace_id` | integer (64-bit) or null | ID of the workspace. |
+| `agent_id` | integer (64-bit) or null | ID of the assigned agent. |
+| `group_id` | integer (64-bit) or null | ID of the assigned group. |
+| `description` | string or null | HTML description of the change. |
+| `description_text` | string or null | Plain text description. |
+| `requester_id` | integer (64-bit) | ID of the requester. |
+| `subject` | string | Subject of the change. |
+| `status` | integer | Current status. |
+| `priority` | integer | Priority level. |
+| `impact` | integer | Impact level. |
+| `risk` | integer | Risk level. |
+| `change_type` | integer | Type of change. |
+| `change_window_id` | integer (64-bit) or null | ID of the change window. |
+| `planned_start_date` | string (ISO 8601 datetime) or null | Planned start date. |
+| `planned_end_date` | string (ISO 8601 datetime) or null | Planned end date. |
+| `department_id` | integer (64-bit) or null | ID of the associated department. |
+| `category` | string or null | Category of the change. |
+| `sub_category` | string or null | Sub-category. |
+| `item_category` | string or null | Item category. |
+| `planning_fields` | struct or null | Planning phase fields. |
+| `custom_fields` | struct (map) | Custom field key-value pairs. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+**Enumerated Values**:
+
+| Field | Value | Label |
+|-------|-------|-------|
+| status | 1 | Open |
+| status | 2 | Planning |
+| status | 3 | Awaiting Approval |
+| status | 4 | Pending Release |
+| status | 5 | Pending Review |
+| status | 6 | Closed |
+| priority | 1 | Low |
+| priority | 2 | Medium |
+| priority | 3 | High |
+| priority | 4 | Urgent |
+| impact | 1 | Low |
+| impact | 2 | Medium |
+| impact | 3 | High |
+| risk | 1 | Low |
+| risk | 2 | Medium |
+| risk | 3 | High |
+| risk | 4 | Very High |
+| change_type | 1 | Minor |
+| change_type | 2 | Standard |
+| change_type | 3 | Major |
+| change_type | 4 | Emergency |
+
+---
+
+### `releases` object
+
+**Source endpoint**: `GET /api/v2/releases`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the release. |
+| `workspace_id` | integer (64-bit) or null | ID of the workspace. |
+| `agent_id` | integer (64-bit) or null | ID of the assigned agent. |
+| `group_id` | integer (64-bit) or null | ID of the assigned group. |
+| `description` | string or null | HTML description of the release. |
+| `description_text` | string or null | Plain text description. |
+| `subject` | string | Subject of the release. |
+| `status` | integer | Current status. |
+| `priority` | integer | Priority level. |
+| `release_type` | integer | Type of release. |
+| `planned_start_date` | string (ISO 8601 datetime) or null | Planned start date. |
+| `planned_end_date` | string (ISO 8601 datetime) or null | Planned end date. |
+| `work_start_date` | string (ISO 8601 datetime) or null | Actual work start date. |
+| `work_end_date` | string (ISO 8601 datetime) or null | Actual work end date. |
+| `department_id` | integer (64-bit) or null | ID of the associated department. |
+| `category` | string or null | Category of the release. |
+| `sub_category` | string or null | Sub-category. |
+| `item_category` | string or null | Item category. |
+| `planning_fields` | struct or null | Planning phase fields. |
+| `custom_fields` | struct (map) | Custom field key-value pairs. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+**Enumerated Values**:
+
+| Field | Value | Label |
+|-------|-------|-------|
+| status | 1 | Open |
+| status | 2 | On hold |
+| status | 3 | In Progress |
+| status | 4 | Incomplete |
+| status | 5 | Completed |
+| priority | 1 | Low |
+| priority | 2 | Medium |
+| priority | 3 | High |
+| priority | 4 | Urgent |
+| release_type | 1 | Minor |
+| release_type | 2 | Standard |
+| release_type | 3 | Major |
+| release_type | 4 | Emergency |
+
+---
+
+### `locations` object
+
+**Source endpoint**: `GET /api/v2/locations`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the location. |
+| `name` | string | Name of the location. |
+| `parent_location_id` | integer (64-bit) or null | ID of the parent location. |
+| `primary_contact_id` | integer (64-bit) or null | ID of the primary contact. |
+| `address` | struct or null | Address details (line1, line2, city, state, country, zipcode). |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `vendors` object
+
+**Source endpoint**: `GET /api/v2/vendors`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the vendor. |
+| `name` | string | Name of the vendor. |
+| `description` | string or null | Description of the vendor. |
+| `primary_contact_id` | integer (64-bit) or null | ID of the primary contact. |
+| `address` | struct or null | Address details. |
+| `custom_fields` | struct (map) | Custom field key-value pairs. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `products` object
+
+**Source endpoint**: `GET /api/v2/products`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the product. |
+| `name` | string | Name of the product. |
+| `asset_type_id` | integer (64-bit) or null | ID of the associated asset type. |
+| `manufacturer` | string or null | Manufacturer name. |
+| `status` | string or null | Status of the product. |
+| `mode_of_procurement` | string or null | How the product is procured. |
+| `depreciation_type_id` | integer (64-bit) or null | ID of the depreciation type. |
+| `description` | string or null | Description of the product. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `contracts` object
+
+**Source endpoint**: `GET /api/v2/contracts`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the contract. |
+| `name` | string | Name of the contract. |
+| `description` | string or null | Description of the contract. |
+| `vendor_id` | integer (64-bit) or null | ID of the associated vendor. |
+| `auto_renew` | boolean | Indicates if auto-renewal is enabled. |
+| `notify_expiry` | boolean | Indicates if expiry notifications are enabled. |
+| `notify_before` | integer or null | Days before expiry to notify. |
+| `approver_id` | integer (64-bit) or null | ID of the approver. |
+| `start_date` | string (date) or null | Contract start date. |
+| `end_date` | string (date) or null | Contract end date. |
+| `cost` | number or null | Cost of the contract. |
+| `status` | string or null | Status of the contract. |
+| `contract_number` | string or null | Contract number. |
+| `contract_type_id` | integer (64-bit) or null | ID of the contract type. |
+| `visible_to_id` | integer (64-bit) or null | Visibility setting. |
+| `notify_to` | array\<string\> | Email addresses to notify. |
+| `custom_fields` | struct (map) | Custom field key-value pairs. |
+| `software_id` | integer (64-bit) or null | ID of associated software. |
+| `license_type` | string or null | Type of license. |
+| `billing_cycle` | string or null | Billing cycle. |
+| `license_key` | string or null | License key. |
+| `item_cost_details` | array\<struct\> | Cost breakdown details. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `purchase_orders` object
+
+**Source endpoint**: `GET /api/v2/purchase_orders`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the purchase order. |
+| `name` | string | Name of the purchase order. |
+| `po_number` | string | Purchase order number. |
+| `vendor_id` | integer (64-bit) or null | ID of the vendor. |
+| `department_id` | integer (64-bit) or null | ID of the department. |
+| `created_by` | integer (64-bit) | ID of the creator. |
+| `expected_delivery_date` | string (date) or null | Expected delivery date. |
+| `shipping_address` | string or null | Shipping address. |
+| `billing_same_as_shipping` | boolean | Indicates if billing address is same as shipping. |
+| `billing_address` | string or null | Billing address. |
+| `currency_code` | string | Currency code (e.g., USD). |
+| `conversion_rate` | number or null | Currency conversion rate. |
+| `discount_percentage` | number or null | Discount percentage. |
+| `tax_percentage` | number or null | Tax percentage. |
+| `shipping_cost` | number or null | Shipping cost. |
+| `custom_fields` | struct (map) | Custom field key-value pairs. |
+| `purchase_items` | array\<struct\> | Line items in the purchase order. |
+| `status` | integer | Status of the purchase order. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+**Enumerated Values**:
+
+| Field | Value | Label |
+|-------|-------|-------|
+| status | 20 | Open |
+| status | 25 | Ordered |
+| status | 30 | Received |
+| status | 35 | Partially Received |
+| status | 40 | Cancelled |
+
+---
+
+### `service_catalog_items` object
+
+**Source endpoint**: `GET /api/v2/service_catalog/items`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the service item. |
+| `name` | string | Name of the service item. |
+| `display_id` | integer | Display ID of the service item. |
+| `description` | string or null | Description of the service item. |
+| `short_description` | string or null | Short description. |
+| `cost` | number or null | Cost of the service item. |
+| `cost_visibility` | boolean | Indicates if cost is visible. |
+| `delivery_time` | integer or null | Delivery time in hours. |
+| `delivery_time_visibility` | boolean | Indicates if delivery time is visible. |
+| `category_id` | integer (64-bit) or null | ID of the category. |
+| `product_id` | integer (64-bit) or null | ID of the associated product. |
+| `group_visibility` | integer | Group visibility setting. |
+| `item_type` | integer | Type of the item. |
+| `ci_type_id` | integer (64-bit) or null | Configuration item type ID. |
+| `visibility` | integer | Visibility setting. |
+| `deleted` | boolean | Indicates if deleted. |
+| `create_child` | boolean | Indicates if child items can be created. |
+| `configs` | struct or null | Configuration settings. |
+| `icon_name` | string or null | Icon name. |
+| `custom_fields` | array\<struct\> | Custom field definitions. |
+| `child_items` | array\<struct\> | Child service items. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `solutions` object (Knowledge Base Articles)
+
+**Source endpoint**: `GET /api/v2/solutions/articles`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the article. |
+| `title` | string | Title of the article. |
+| `description` | string or null | HTML content of the article. |
+| `description_text` | string or null | Plain text content. |
+| `status` | integer | Publication status. |
+| `approval_status` | integer or null | Approval status. |
+| `folder_id` | integer (64-bit) | ID of the folder containing the article. |
+| `category_id` | integer (64-bit) | ID of the category. |
+| `agent_id` | integer (64-bit) or null | ID of the author agent. |
+| `thumbs_up` | integer | Number of thumbs up. |
+| `thumbs_down` | integer | Number of thumbs down. |
+| `hits` | integer | Number of views. |
+| `tags` | array\<string\> | Associated tags. |
+| `keywords` | array\<string\> | SEO keywords. |
+| `seo_data` | struct or null | SEO metadata. |
+| `attachments` | array\<struct\> | Attached files. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+**Enumerated Values**:
+
+| Field | Value | Label |
+|-------|-------|-------|
+| status | 1 | Draft |
+| status | 2 | Published |
+
+---
+
+### `time_entries` object (Child of tickets)
+
+**Source endpoint**: `GET /api/v2/tickets/{ticket_id}/time_entries`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the time entry. |
+| `ticket_id` | integer (64-bit) | ID of the parent ticket (connector-derived). |
+| `start_time` | string (ISO 8601 datetime) | Start time of the work. |
+| `timer_running` | boolean | Indicates if timer is currently running. |
+| `billable` | boolean | Indicates if the time is billable. |
+| `time_spent` | string | Time spent (HH:MM format). |
+| `executed_at` | string (ISO 8601 datetime) | Date when work was executed. |
+| `task_id` | integer (64-bit) or null | ID of the associated task. |
+| `note` | string or null | Notes about the time entry. |
+| `agent_id` | integer (64-bit) | ID of the agent who logged the time. |
+| `custom_fields` | struct (map) | Custom field key-value pairs. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `conversations` object (Child of tickets)
+
+**Source endpoint**: `GET /api/v2/tickets/{ticket_id}/conversations`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the conversation. |
+| `ticket_id` | integer (64-bit) | ID of the parent ticket (connector-derived). |
+| `user_id` | integer (64-bit) | ID of the user who created the conversation. |
+| `body` | string | HTML content of the conversation. |
+| `body_text` | string | Plain text content. |
+| `incoming` | boolean | Indicates if this is an incoming message. |
+| `private` | boolean | Indicates if this is a private note. |
+| `source` | integer | Source of the conversation (same as ticket source). |
+| `support_email` | string or null | Support email used. |
+| `to_emails` | array\<string\> | Recipient email addresses. |
+| `from_email` | string or null | Sender email address. |
+| `cc_emails` | array\<string\> | CC email addresses. |
+| `bcc_emails` | array\<string\> | BCC email addresses. |
+| `attachments` | array\<struct\> | Attached files. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `tasks` object (Child of tickets/problems/changes/releases)
+
+**Source endpoint**: `GET /api/v2/tickets/{ticket_id}/tasks` (also available for problems, changes, releases)
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the task. |
+| `parent_id` | integer (64-bit) | ID of the parent object (connector-derived). |
+| `parent_type` | string | Type of parent: ticket, problem, change, or release (connector-derived). |
+| `agent_id` | integer (64-bit) or null | ID of the assigned agent. |
+| `group_id` | integer (64-bit) or null | ID of the assigned group. |
+| `status` | integer | Status of the task. |
+| `title` | string | Title of the task. |
+| `description` | string or null | Description of the task. |
+| `notify_before` | integer or null | Minutes before due to notify. |
+| `due_date` | string (ISO 8601 datetime) or null | Due date of the task. |
+| `closed_at` | string (ISO 8601 datetime) or null | Closure timestamp. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+**Enumerated Values**:
+
+| Field | Value | Label |
+|-------|-------|-------|
+| status | 1 | Open |
+| status | 2 | In Progress |
+| status | 3 | Completed |
+
+---
+
+### `ticket_fields` object (Configuration)
+
+**Source endpoint**: `GET /api/v2/ticket_fields`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the field. |
+| `workspace_id` | integer (64-bit) or null | ID of the workspace. |
+| `name` | string | Name/key of the field. |
+| `label` | string | Display label of the field. |
+| `description` | string or null | Description of the field. |
+| `field_type` | string | Type of the field (e.g., custom_text, custom_dropdown). |
+| `required` | boolean | Indicates if the field is required. |
+| `required_for_closure` | boolean | Indicates if required for ticket closure. |
+| `position` | integer | Display position. |
+| `default` | boolean | Indicates if this is a default field. |
+| `visible_in_portal` | boolean | Indicates visibility in portal. |
+| `editable_in_portal` | boolean | Indicates if editable in portal. |
+| `required_in_portal` | boolean | Indicates if required in portal. |
+| `choices` | array\<struct\> | Available choices for dropdown fields. |
+| `nested_fields` | array\<struct\> | Nested field definitions. |
+| `sections` | array\<struct\> | Field sections. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `roles` object
+
+**Source endpoint**: `GET /api/v2/roles`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the role. |
+| `name` | string | Name of the role. |
+| `description` | string or null | Description of the role. |
+| `default` | boolean | Indicates if this is a default role. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `sla_policies` object
+
+**Source endpoint**: `GET /api/v2/sla_policies`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the SLA policy. |
+| `name` | string | Name of the SLA policy. |
+| `description` | string or null | Description of the policy. |
+| `position` | integer | Priority position. |
+| `is_default` | boolean | Indicates if this is the default policy. |
+| `active` | boolean | Indicates if the policy is active. |
+| `deleted` | boolean | Indicates if deleted. |
+| `applicable_to` | struct | Conditions for when the policy applies. |
+| `sla_targets` | array\<struct\> | SLA target definitions. |
+| `escalation` | struct or null | Escalation rules. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `business_hours` object
+
+**Source endpoint**: `GET /api/v2/business_hours`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the business hours config. |
+| `name` | string | Name of the business hours configuration. |
+| `description` | string or null | Description. |
+| `is_default` | boolean | Indicates if this is the default configuration. |
+| `time_zone` | string | Time zone for the business hours. |
+| `service_desk_hours` | struct | Working hours for each day of the week. |
+| `list_of_holidays` | array\<struct\> | List of holidays. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `announcements` object
+
+**Source endpoint**: `GET /api/v2/announcements`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the announcement. |
+| `title` | string | Title of the announcement. |
+| `body_html` | string | HTML content of the announcement. |
+| `body` | string | Plain text content. |
+| `visible_from` | string (ISO 8601 datetime) | Start date for visibility. |
+| `visible_till` | string (ISO 8601 datetime) or null | End date for visibility. |
+| `visibility` | string | Visibility setting (all, agents, groups). |
+| `departments` | array\<integer\> | Department IDs for visibility. |
+| `groups` | array\<integer\> | Group IDs for visibility. |
+| `state` | string | State of the announcement (active, archived). |
+| `created_by` | integer (64-bit) | ID of the creator. |
+| `additional_emails` | array\<string\> | Additional email addresses. |
+| `is_read` | boolean | Read status. |
+| `send_email` | boolean | Indicates if email was sent. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
 
 
 ## **Get Object Primary Keys**
 
-There is no dedicated metadata endpoint to get the primary key for the `tickets` object.
-Instead, the primary key is defined **statically** based on the resource schema.
+Primary keys are defined **statically** based on resource schemas. There is no dedicated metadata endpoint.
 
-- **Primary key for `tickets`**: `id`
-  - Type: 64-bit integer
-  - Property: Unique across all tickets within the Freshservice account.
-
-The connector will:
-- Read the `id` field from each ticket record returned by `GET /api/v2/tickets`.
-- Use it as the immutable primary key for upserts when ingestion type is `cdc`.
-
-Example showing primary key in response:
-
-```json
-{
-  "id": 1,
-  "subject": "Support Needed...",
-  "status": 2,
-  "created_at": "2025-01-10T09:00:00Z",
-  "updated_at": "2025-01-10T10:30:00Z"
-}
-```
+| Object | Primary Key | Type |
+|--------|-------------|------|
+| `tickets` | `id` | integer (64-bit) |
+| `agents` | `id` | integer (64-bit) |
+| `requesters` | `id` | integer (64-bit) |
+| `groups` | `id` | integer (64-bit) |
+| `departments` | `id` | integer (64-bit) |
+| `assets` | `id` | integer (64-bit) |
+| `problems` | `id` | integer (64-bit) |
+| `changes` | `id` | integer (64-bit) |
+| `releases` | `id` | integer (64-bit) |
+| `locations` | `id` | integer (64-bit) |
+| `vendors` | `id` | integer (64-bit) |
+| `products` | `id` | integer (64-bit) |
+| `contracts` | `id` | integer (64-bit) |
+| `purchase_orders` | `id` | integer (64-bit) |
+| `service_catalog_items` | `id` | integer (64-bit) |
+| `solutions` | `id` | integer (64-bit) |
+| `time_entries` | `id` (composite with `ticket_id`) | integer (64-bit) |
+| `conversations` | `id` (composite with `ticket_id`) | integer (64-bit) |
+| `tasks` | `id` (composite with `parent_id`, `parent_type`) | integer (64-bit) |
+| `ticket_fields` | `id` | integer (64-bit) |
+| `roles` | `id` | integer (64-bit) |
+| `sla_policies` | `id` | integer (64-bit) |
+| `business_hours` | `id` | integer (64-bit) |
+| `announcements` | `id` | integer (64-bit) |
 
 
 ## **Object's Ingestion Type**
 
-Supported ingestion types (framework-level definitions):
-- `cdc`: Change data capture; supports upserts and/or deletes incrementally.
-- `snapshot`: Full replacement snapshot; no inherent incremental support.
-- `append`: Incremental but append-only (no updates/deletes).
-
-**Planned ingestion type for `tickets`**: `cdc`
-
-| Object | Ingestion Type | Rationale |
-|--------|----------------|-----------|
-| `tickets` | `cdc` | Tickets have a stable primary key `id` and an `updated_at` field that can be used as a cursor for incremental syncs. The `deleted` field indicates soft-deleted tickets. |
-
-For `tickets`:
-- **Primary key**: `id`
-- **Cursor field**: `updated_at`
-- **Sort order**: The API returns tickets in descending order by default. For incremental sync, use `updated_since` filter parameter.
-- **Deletes**: Freshservice uses soft deletes; the `deleted` field is set to `true` for trashed tickets. Hard-deleted tickets are not retrievable.
+| Object | Ingestion Type | Cursor Field | Rationale |
+|--------|----------------|--------------|-----------|
+| `tickets` | `cdc` | `updated_at` | Has `updated_since` filter and `deleted` flag. |
+| `agents` | `cdc` | `updated_at` | Can be filtered by state; tracks active/inactive. |
+| `requesters` | `cdc` | `updated_at` | Can be filtered by state. |
+| `groups` | `snapshot` | - | Small dataset; no incremental filter. |
+| `departments` | `snapshot` | - | Small dataset; no incremental filter. |
+| `assets` | `cdc` | `updated_at` | Has `updated_at` field. |
+| `problems` | `cdc` | `updated_at` | Has `updated_since` filter. |
+| `changes` | `cdc` | `updated_at` | Has `updated_since` filter. |
+| `releases` | `cdc` | `updated_at` | Has `updated_since` filter. |
+| `locations` | `snapshot` | - | Small dataset; no incremental filter. |
+| `vendors` | `snapshot` | - | Small dataset; no incremental filter. |
+| `products` | `snapshot` | - | Small dataset; no incremental filter. |
+| `contracts` | `snapshot` | - | No incremental filter available. |
+| `purchase_orders` | `cdc` | `updated_at` | Has `updated_at` field. |
+| `service_catalog_items` | `snapshot` | - | Small dataset; no incremental filter. |
+| `solutions` | `cdc` | `updated_at` | Has `updated_at` field. |
+| `time_entries` | `append` | - | Child records; append only. |
+| `conversations` | `append` | - | Child records; append only. |
+| `tasks` | `cdc` | `updated_at` | Can track status changes. |
+| `ticket_fields` | `snapshot` | - | Configuration data. |
+| `roles` | `snapshot` | - | Configuration data. |
+| `sla_policies` | `snapshot` | - | Configuration data. |
+| `business_hours` | `snapshot` | - | Configuration data. |
+| `announcements` | `snapshot` | - | Small dataset. |
 
 
 ## **Read API for Data Retrieval**
 
-### Primary read endpoint for `tickets`
+### Common Query Parameters
 
-- **HTTP method**: `GET`
-- **Endpoint**: `/api/v2/tickets`
-- **Base URL**: `https://<your_domain>.freshservice.com`
+Most list endpoints support these parameters:
 
-**Query parameters** (relevant for ingestion):
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `per_page` | integer | 30 | Results per page (max 100). |
+| `page` | integer | 1 | Page number. |
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `per_page` | integer | no | 30 | Number of results per page (max 100). |
-| `page` | integer | no | 1 | Page number of the results to fetch. |
-| `filter` | string | no | none | Predefined filter name. Options: `new_and_my_open`, `watching`, `spam`, `deleted`. |
-| `requester_id` | integer | no | none | Filter tickets by requester ID. |
-| `email` | string | no | none | Filter tickets by requester email. |
-| `updated_since` | string (ISO 8601 datetime) | no | none | Return tickets updated at or after this time. Used for incremental reads. |
-| `type` | string | no | none | Filter by ticket type (e.g., `Incident`, `Service Request`). |
-| `include` | string | no | none | Include additional information. Options: `requester`, `stats`, `department`, `problem`, `assets`, `change`, `related_tickets`, `requested_for`. Use comma-separated values for multiple includes. |
-| `order_by` | string | no | `created_at` | Field to sort by. Options: `created_at`, `due_by`, `updated_at`, `status`. |
-| `order_type` | string | no | `desc` | Sort direction: `asc` or `desc`. |
+### Endpoints with Incremental Support (`updated_since`)
 
-**Advanced filtering with `query` parameter**:
+| Object | Endpoint | Incremental Parameter |
+|--------|----------|----------------------|
+| `tickets` | `GET /api/v2/tickets` | `updated_since` |
+| `problems` | `GET /api/v2/problems` | `updated_since` |
+| `changes` | `GET /api/v2/changes` | `updated_since` |
+| `releases` | `GET /api/v2/releases` | - (use query filter) |
+| `agents` | `GET /api/v2/agents` | Filter by `state` |
+| `requesters` | `GET /api/v2/requesters` | Filter by `state` |
 
-For more complex filtering, use the `query` parameter with Freshservice Query Language:
+### Example Requests
 
-```
-GET /api/v2/tickets?query="priority:2 AND status:3"
-```
-
-Query syntax:
-- Use double quotes around the query string
-- Logical operators: `AND`, `OR`
-- Relational operators: `:` (equals), `:>` (greater than), `:<` (less than)
-- URL-encode the query string
-
-Example queries:
-- Filter by status: `query="status:2"` (Open tickets)
-- Filter by priority and status: `query="priority:4 AND status:2"` (Urgent and Open)
-- Filter by date: `query="created_at:>'2025-01-01'"` (Tickets created after Jan 1, 2025)
-
-**Pagination strategy**:
-- Freshservice uses traditional page-based pagination with `per_page` and `page` parameters.
-- The response includes the ticket count but does not include explicit pagination links.
-- The connector should:
-  - Request with `per_page=100` (maximum) for efficiency.
-  - Continue incrementing `page` until an empty `tickets` array is returned.
-
-**Rate Limits**:
-- Rate limits vary by Freshservice plan:
-  - **Starter/Growth**: TBD: Check your account's rate limit headers
-  - **Pro/Enterprise**: Higher limits
-- Rate limit information is returned in response headers:
-  - `X-RateLimit-Total`: Total number of requests allowed per minute
-  - `X-RateLimit-Remaining`: Number of requests remaining in the current window
-  - `X-RateLimit-Used-CurrentRequest`: Number of API calls consumed by the current request
-- When rate limited, the API returns HTTP status `429 Too Many Requests`
-- Recommended: Implement exponential backoff when encountering rate limits
-
-Example incremental read using `updated_since`:
-
-```bash
-SINCE_TS="2025-01-01T00:00:00Z"
-curl -X GET \
-  -u "<API_KEY>:X" \
-  -H "Content-Type: application/json" \
-  "https://<your_domain>.freshservice.com/api/v2/tickets?updated_since=${SINCE_TS}&per_page=100&order_by=updated_at&order_type=asc"
-```
-
-**Incremental strategy**:
-- On the first run, the connector can:
-  - Either perform a full historical backfill (no `updated_since`), or
-  - Use a configurable `start_date` as the initial cursor.
-- On subsequent runs:
-  - Use the maximum `updated_at` value (minus a small lookback window, e.g., a few minutes) from the previous sync as the new `updated_since` parameter.
-  - Sort by `updated_at` ascending to process records in order.
-
-**Handling deletes**:
-- Deleted tickets can be retrieved using the `filter=deleted` parameter:
-  ```bash
-  curl -X GET \
-    -u "<API_KEY>:X" \
-    "https://<your_domain>.freshservice.com/api/v2/tickets?filter=deleted&per_page=100"
-  ```
-- Alternatively, tickets have a `deleted` boolean field that is set to `true` when trashed.
-- The connector should:
-  - Periodically check the deleted tickets filter to identify soft-deleted records.
-  - Mark records with `deleted=true` as deleted in downstream systems.
-
-### View a single ticket
-
-- **HTTP method**: `GET`
-- **Endpoint**: `/api/v2/tickets/{ticket_id}`
-
+**List Tickets (Incremental)**:
 ```bash
 curl -X GET \
   -u "<API_KEY>:X" \
-  "https://<your_domain>.freshservice.com/api/v2/tickets/1"
+  "https://<domain>.freshservice.com/api/v2/tickets?updated_since=2025-01-01T00:00:00Z&per_page=100"
 ```
 
-This endpoint returns the full ticket object, useful for fetching individual ticket details.
-
-### Retrieve ticket fields (schema discovery)
-
-- **HTTP method**: `GET`
-- **Endpoint**: `/api/v2/ticket_fields`
-
+**List Agents**:
 ```bash
 curl -X GET \
   -u "<API_KEY>:X" \
-  "https://<your_domain>.freshservice.com/api/v2/ticket_fields"
+  "https://<domain>.freshservice.com/api/v2/agents?per_page=100"
 ```
 
-This endpoint returns all ticket fields including custom fields defined in your Freshservice account.
+**List Problems**:
+```bash
+curl -X GET \
+  -u "<API_KEY>:X" \
+  "https://<domain>.freshservice.com/api/v2/problems?per_page=100"
+```
+
+**List Changes**:
+```bash
+curl -X GET \
+  -u "<API_KEY>:X" \
+  "https://<domain>.freshservice.com/api/v2/changes?per_page=100"
+```
+
+**List Assets**:
+```bash
+curl -X GET \
+  -u "<API_KEY>:X" \
+  "https://<domain>.freshservice.com/api/v2/assets?per_page=100"
+```
+
+**List Ticket Conversations** (child endpoint):
+```bash
+curl -X GET \
+  -u "<API_KEY>:X" \
+  "https://<domain>.freshservice.com/api/v2/tickets/1/conversations"
+```
+
+**List Ticket Time Entries** (child endpoint):
+```bash
+curl -X GET \
+  -u "<API_KEY>:X" \
+  "https://<domain>.freshservice.com/api/v2/tickets/1/time_entries"
+```
+
+### Rate Limits
+
+- Rate limits vary by Freshservice subscription plan
+- Response headers provide rate limit information:
+  - `X-RateLimit-Total`: Total requests allowed per minute
+  - `X-RateLimit-Remaining`: Remaining requests in current window
+  - `X-RateLimit-Used-CurrentRequest`: Requests consumed by current call
+- HTTP 429 response when rate limited
+- Implement exponential backoff for rate limit handling
+
+### Pagination Strategy
+
+1. Set `per_page=100` (maximum) for efficiency
+2. Increment `page` parameter until empty array returned
+3. For incremental syncs:
+   - Use `updated_since` with cursor timestamp
+   - Order by `updated_at` ascending when supported
+   - Store max `updated_at` for next sync
+
+### Handling Deletes
+
+| Object | Delete Handling |
+|--------|-----------------|
+| `tickets` | Use `filter=deleted` or check `deleted` field |
+| `agents` | Check `active` field |
+| `requesters` | Check `active` field |
+| `assets` | Assets can be deleted; check for 404 |
+| `problems` | Check status |
+| `changes` | Check status |
+| `releases` | Check status |
 
 
 ## **Field Type Mapping**
 
-### General mapping (Freshservice JSON → connector logical types)
-
-| Freshservice JSON Type | Example Fields | Connector Logical Type | Notes |
-|------------------------|----------------|------------------------|-------|
-| integer (32/64-bit) | `id`, `requester_id`, `status`, `priority` | `long` / integer | For Spark-based connectors, prefer 64-bit integer (`LongType`). |
-| string | `subject`, `description`, `type`, `category` | string | UTF-8 text. Long HTML descriptions should be supported. |
-| boolean | `is_escalated`, `spam`, `deleted` | boolean | Standard true/false. |
-| string (ISO 8601 datetime) | `created_at`, `updated_at`, `due_by`, `fr_due_by` | timestamp with timezone | Stored as UTC timestamps; parsing must respect ISO 8601 format. |
-| object | `custom_fields` | struct (map) | Represented as a map/struct of custom field key-value pairs. |
-| array | `tags`, `cc_emails`, `attachments` | array\<string\> or array\<struct\> | Arrays of strings or nested objects. |
-| nullable fields | `description`, `responder_id`, `group_id` | corresponding type + null | When fields are absent or null, the connector should surface `null`, not `{}`. |
-
-### Special behaviors and constraints
-
-- `id` and other numeric identifiers should be stored as **64-bit integers** to avoid overflow.
-- `status`, `priority`, `source`, `impact`, `urgency` are effectively enums represented as integers; the connector preserves them as integers for flexibility.
-- Timestamp fields use ISO 8601 format (e.g., `"2025-01-10T09:00:00Z"`); parsing must handle timezone designators.
-- `custom_fields` is a dynamic map structure whose keys and value types depend on the account's configuration; the connector should treat this as a struct/map type.
-- `attachments` is an array of structured objects; each attachment has its own schema.
-- Boolean fields like `deleted`, `spam`, `is_escalated` indicate ticket states that may affect downstream processing.
+| Freshservice Type | Example Fields | Connector Type | Notes |
+|-------------------|----------------|----------------|-------|
+| integer | `id`, `status`, `priority` | `LongType` | Use 64-bit integers |
+| string | `subject`, `name`, `description` | `StringType` | UTF-8 text |
+| boolean | `active`, `deleted`, `spam` | `BooleanType` | true/false |
+| datetime | `created_at`, `updated_at` | `TimestampType` | ISO 8601 format |
+| date | `start_date`, `end_date` | `DateType` | YYYY-MM-DD format |
+| object | `custom_fields`, `address` | `StructType`/`MapType` | Nested structure |
+| array | `tags`, `cc_emails` | `ArrayType` | Array of elements |
+| number | `cost`, `conversion_rate` | `DoubleType` | Decimal numbers |
 
 
 ## **Write API**
 
-The initial connector implementation is primarily **read-only**. However, for completeness, the Freshservice REST API supports write operations relevant to the `tickets` object.
+The connector is primarily read-only. Write endpoints are available for:
 
-### Create a ticket
-
-- **HTTP method**: `POST`
-- **Endpoint**: `/api/v2/tickets`
-
-**Request body (JSON)**:
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `subject` | string | no | Title of the ticket (auto-generated if not provided). |
-| `description` | string | no | HTML content of the ticket. |
-| `requester_id` | integer | conditional | User ID of the requester. Required if `email` is not provided. |
-| `email` | string | conditional | Email of the requester. Required if `requester_id` is not provided. Creates a new contact if email doesn't exist. |
-| `status` | integer | yes | Status of the ticket (e.g., 2 for Open). |
-| `priority` | integer | yes | Priority of the ticket (e.g., 1 for Low). |
-| `source` | integer | no | Channel source (defaults to 2 for Portal). |
-| `type` | string | no | Ticket type (e.g., `Incident`, `Service Request`). |
-| `responder_id` | integer | no | ID of the agent to assign. |
-| `group_id` | integer | no | ID of the group to assign. |
-| `category` | string | no | Category of the ticket. |
-| `sub_category` | string | no | Sub-category of the ticket. |
-| `item_category` | string | no | Item category of the ticket. |
-| `custom_fields` | object | no | Custom field key-value pairs. |
-| `tags` | array | no | Tags to associate with the ticket. |
-| `attachments` | array | no | File attachments (multipart form data). |
-
-Example request:
-
-```bash
-curl -X POST \
-  -u "<API_KEY>:X" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "subject": "Laptop not working",
-    "description": "<div>My laptop screen is blank.</div>",
-    "email": "john.doe@example.com",
-    "status": 2,
-    "priority": 2,
-    "type": "Incident",
-    "category": "Hardware",
-    "sub_category": "Laptop"
-  }' \
-  "https://<your_domain>.freshservice.com/api/v2/tickets"
-```
-
-### Update a ticket
-
-- **HTTP method**: `PUT`
-- **Endpoint**: `/api/v2/tickets/{ticket_id}`
-
-**Commonly updated fields**:
-- `subject`
-- `description`
-- `status`
-- `priority`
-- `responder_id`
-- `group_id`
-- `category`, `sub_category`, `item_category`
-- `custom_fields`
-- `tags`
-
-Example request to update status:
-
-```bash
-curl -X PUT \
-  -u "<API_KEY>:X" \
-  -H "Content-Type: application/json" \
-  -d '{"status": 4}' \
-  "https://<your_domain>.freshservice.com/api/v2/tickets/1"
-```
-
-### Delete a ticket
-
-- **HTTP method**: `DELETE`
-- **Endpoint**: `/api/v2/tickets/{ticket_id}`
-
-This moves the ticket to trash (soft delete). The ticket can be restored later.
-
-```bash
-curl -X DELETE \
-  -u "<API_KEY>:X" \
-  "https://<your_domain>.freshservice.com/api/v2/tickets/1"
-```
-
-### Restore a deleted ticket
-
-- **HTTP method**: `PUT`
-- **Endpoint**: `/api/v2/tickets/{ticket_id}/restore`
-
-```bash
-curl -X PUT \
-  -u "<API_KEY>:X" \
-  "https://<your_domain>.freshservice.com/api/v2/tickets/1/restore"
-```
-
-**Validation / read-after-write**:
-- The connector (or user) can validate writes by:
-  - Reading back the updated ticket via `GET /api/v2/tickets/{ticket_id}`, or
-  - Letting the next incremental read (using `updated_since`) pick up the change.
+| Object | Create | Update | Delete |
+|--------|--------|--------|--------|
+| `tickets` | POST /api/v2/tickets | PUT /api/v2/tickets/{id} | DELETE /api/v2/tickets/{id} |
+| `agents` | POST /api/v2/agents | PUT /api/v2/agents/{id} | DELETE /api/v2/agents/{id} |
+| `requesters` | POST /api/v2/requesters | PUT /api/v2/requesters/{id} | DELETE /api/v2/requesters/{id} |
+| `assets` | POST /api/v2/assets | PUT /api/v2/assets/{id} | DELETE /api/v2/assets/{id} |
+| `problems` | POST /api/v2/problems | PUT /api/v2/problems/{id} | DELETE /api/v2/problems/{id} |
+| `changes` | POST /api/v2/changes | PUT /api/v2/changes/{id} | DELETE /api/v2/changes/{id} |
+| `releases` | POST /api/v2/releases | PUT /api/v2/releases/{id} | DELETE /api/v2/releases/{id} |
 
 
 ## **Known Quirks & Edge Cases**
 
-- **Workspace support**:
-  - The `workspace_id` field is only present for accounts with workspaces enabled.
-  - For single-workspace accounts, this field may be null or absent.
-
-- **Custom fields**:
-  - Custom fields are account-specific and their schema varies.
-  - Use `GET /api/v2/ticket_fields` to discover available custom fields and their types.
-  - Custom field keys in the response are prefixed with `cf_` (e.g., `cf_employee_id`).
-
-- **Deleted tickets**:
-  - Deleted tickets are soft-deleted (moved to trash) and can be restored.
-  - To retrieve deleted tickets, use `filter=deleted` parameter.
-  - The `deleted` boolean field on a ticket indicates its trash status.
-
-- **Rate limiting**:
-  - Rate limits vary by subscription plan.
-  - Always check `X-RateLimit-Remaining` header to avoid hitting limits.
-  - Implement exponential backoff when receiving 429 responses.
-
-- **Pagination limits**:
-  - Maximum of 100 records per page with `per_page=100`.
-  - Some filtered queries may have additional result limits (e.g., query filter may return max 30 days of data by default).
-
-- **Description vs description_text**:
-  - `description` contains HTML-formatted content.
-  - `description_text` contains the plain text version.
-  - Both fields may be present in responses.
-
-- **Ticket types**:
-  - Default types are `Incident` and `Service Request`.
-  - Additional custom types can be configured in Freshservice.
-
-- **SLA and escalation**:
-  - `is_escalated` and `fr_escalated` flags indicate SLA breach status.
-  - `due_by` and `fr_due_by` timestamps are computed based on SLA policies.
+- **API V1 Deprecation**: API V1 was deprecated on May 31, 2023. Use API V2 only.
+- **Workspace support**: `workspace_id` field only present for multi-workspace accounts.
+- **Custom fields**: Custom field keys are prefixed with `cf_` (e.g., `cf_employee_id`).
+- **Child objects**: `time_entries`, `conversations`, `tasks` require parent ID in endpoint path.
+- **Soft deletes**: Tickets use soft deletes (`deleted` flag); can be restored.
+- **Rate limiting**: Varies by plan; always check response headers.
+- **Pagination limits**: Max 100 records per page.
+- **Query filter limits**: Some queries limited to 30 days of data.
+- **Timestamp format**: All timestamps in ISO 8601 UTC format.
+- **Null vs empty**: Absent fields return `null`, not empty objects.
+- **HTML content**: `description` fields contain HTML; `description_text` contains plain text.
 
 
 ## **Research Log**
 
 | Source Type | URL | Accessed (UTC) | Confidence | What it confirmed |
 |------------|-----|----------------|------------|-------------------|
-| Official Docs | https://api.freshservice.com/#ticket_attributes | 2025-12-23 | High | Ticket object attributes, data types, and enumerated values for status, priority, source. |
-| Official Docs | https://api.freshservice.com/ | 2025-12-23 | High | API endpoint structure, authentication method (Basic Auth with API key), and general API behavior. |
-| Official Support | https://support.freshservice.com/support/solutions/articles/50000000294 | 2025-12-23 | High | How to retrieve ticket fields using API, including custom fields. |
-| Official Docs | https://developers.freshworks.com/api-sdk/freshservice/tickets.html | 2025-12-23 | High | Ticket SDK documentation with attribute descriptions and examples. |
-| Web Search | Various search results | 2025-12-23 | Medium | Confirmed ticket attributes, pagination, and filtering options. |
+| Official Docs | https://api.freshservice.com/ | 2026-01-08 | High | All endpoints, authentication, object schemas |
+| Official Docs | https://api.freshservice.com/#ticket_attributes | 2026-01-08 | High | Ticket attributes and enumerated values |
+| Official Docs | https://api.freshservice.com/#agents | 2026-01-08 | High | Agent schema and endpoints |
+| Official Docs | https://api.freshservice.com/#requesters | 2026-01-08 | High | Requester schema and endpoints |
+| Official Docs | https://api.freshservice.com/#assets | 2026-01-08 | High | Asset schema and endpoints |
+| Official Docs | https://api.freshservice.com/#problems | 2026-01-08 | High | Problem schema and endpoints |
+| Official Docs | https://api.freshservice.com/#changes | 2026-01-08 | High | Change schema and endpoints |
+| Official Docs | https://api.freshservice.com/#releases | 2026-01-08 | High | Release schema and endpoints |
+| Official Support | https://support.freshservice.com/support/solutions/articles/50000004220 | 2026-01-08 | High | API V1 deprecation notice |
+| Official Support | https://support.freshservice.com/support/solutions/articles/50000000294 | 2026-01-08 | High | How to retrieve ticket fields |
+| Web Search | Various | 2026-01-08 | Medium | Cross-verified object lists and schemas |
 
 
 ## **Sources and References**
 
-- **Official Freshservice REST API documentation** (highest confidence)
+- **Official Freshservice REST API Documentation** (highest confidence)
   - `https://api.freshservice.com/`
-  - `https://api.freshservice.com/#ticket_attributes`
-  - `https://api.freshservice.com/#list_all_tickets`
-  - `https://api.freshservice.com/#view_a_ticket`
-  - `https://api.freshservice.com/#create_a_ticket`
-  - `https://api.freshservice.com/#update_a_ticket`
-  - `https://api.freshservice.com/#delete_a_ticket`
-  - `https://api.freshservice.com/#restore_a_ticket`
-  - `https://api.freshservice.com/#filter_tickets`
+  - Covers all objects: tickets, agents, requesters, groups, departments, assets, problems, changes, releases, service catalog, solutions, etc.
 
-- **Freshworks Developer Documentation** (high confidence)
-  - `https://developers.freshworks.com/api-sdk/freshservice/tickets.html`
+- **Freshworks Developer Documentation**
+  - `https://developers.freshworks.com/`
 
-- **Freshservice Support Documentation** (high confidence)
-  - `https://support.freshservice.com/support/solutions/articles/50000000294` (Get ticket fields via API)
+- **Freshservice Support Articles**
+  - `https://support.freshservice.com/support/solutions/articles/50000004220` (API V1 deprecation)
+  - `https://support.freshservice.com/support/solutions/articles/50000000294` (Ticket fields API)
 
 When conflicts arise, **official Freshservice API documentation** is treated as the source of truth.
 
@@ -623,10 +1161,9 @@ When conflicts arise, **official Freshservice API documentation** is treated as 
 ## **Acceptance Checklist**
 
 - [x] All required headings present and in order.
-- [x] Every field in the tickets schema is listed (no omissions).
-- [x] Exactly one authentication method is documented (Basic Auth with API Key).
+- [x] All major objects documented with schemas.
+- [x] Exactly one authentication method documented (Basic Auth with API Key).
 - [x] Endpoints include params, examples, and pagination details.
-- [x] Incremental strategy defines cursor (`updated_at`), order, lookback, and delete handling.
+- [x] Incremental strategy defined for applicable objects.
 - [x] Research Log completed; Sources include full URLs.
-- [x] No unverifiable claims; rate limit details noted as plan-dependent.
-
+- [x] No unverifiable claims; gaps marked as TBD where applicable.

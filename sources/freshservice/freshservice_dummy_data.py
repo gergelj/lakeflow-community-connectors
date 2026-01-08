@@ -129,6 +129,11 @@ def generate_iso_datetime(days_ago: int = 0, hours_ago: int = 0) -> str:
     dt = datetime.utcnow() - timedelta(days=days_ago, hours=hours_ago)
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
+def generate_future_iso_datetime(days: int = 0, hours: int = 0) -> str:
+    """Generate an ISO 8601 datetime string."""
+    dt = datetime.utcnow() + timedelta(days=days, hours=hours)
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
 
 def generate_date(days_ago: int = 0) -> str:
     """Generate a date string in YYYY-MM-DD format."""
@@ -233,11 +238,12 @@ def generate_ticket_payload(ticket: dict[str, Any]) -> dict[str, Any]:
         "priority": ticket["priority"],
         "source": ticket["source"],
         "requester_id": ticket["requester_id"],
+        "responder_id": ticket["responder_id"],
     }
     
     # Add optional fields if present - only add responder_id if it's a valid agent ID
-    if ticket.get("responder_id") and ticket["responder_id"] in VALID_AGENT_IDS:
-        payload["responder_id"] = ticket["responder_id"]
+    # if ticket.get("responder_id") and ticket["responder_id"] in VALID_AGENT_IDS:
+    #     payload["responder_id"] = ticket["responder_id"]
     if ticket.get("email"):
         payload["email"] = ticket["email"]
     if ticket.get("type"):
@@ -541,14 +547,14 @@ def generate_assets(count: int = 10) -> list[dict[str, Any]]:
     ]
     
     asset_types = {
-        1: "Laptop",
-        2: "Desktop",
-        3: "Monitor",
-        4: "Peripheral",
-        5: "Phone",
-        6: "Printer",
-        7: "Server",
-        8: "Network Equipment"
+        58000460346: "Laptop",
+        58000460346: "Desktop",
+        58000460346: "Monitor",
+        58000460346: "Peripheral",
+        58000460346: "Phone",
+        58000460346: "Printer",
+        58000460346: "Server",
+        58000460346: "Network Equipment"
     }
     
     impacts = ["low", "medium", "high"]
@@ -575,11 +581,11 @@ def generate_assets(count: int = 10) -> list[dict[str, Any]]:
             "assigned_on": generate_iso_datetime(days_ago=random.randint(1, 365)) if random.random() > 0.3 else None,
             "end_of_life": generate_date(days_ago=-random.randint(365, 1095)) if random.random() > 0.5 else None,
             "discovery_enabled": random.random() > 0.5,
-            "type_fields": {
-                "serial_number_58000324654": f"SN{random.randint(100000000, 999999999)}",
-                "manufacturer_58000324655": random.choice(["Dell", "HP", "Apple", "Lenovo", "Microsoft"]),
-                "model_58000324656": f"Model-{random.randint(100, 999)}"
-            },
+            # "type_fields": {
+            #     "serial_number_58000324654": f"SN{random.randint(100000000, 999999999)}",
+            #     "manufacturer_58000324655": random.choice(["Dell", "HP", "Apple", "Lenovo", "Microsoft"]),
+            #     "model_58000324656": f"Model-{random.randint(100, 999)}"
+            # },
             "created_at": generate_iso_datetime(days_ago=random.randint(30, 365)),
             "updated_at": generate_iso_datetime(days_ago=random.randint(0, 30))
         }
@@ -607,8 +613,8 @@ def generate_asset_payload(asset: dict[str, Any]) -> dict[str, Any]:
         payload["user_id"] = asset["user_id"]
     if asset.get("agent_id"):
         payload["agent_id"] = asset["agent_id"]
-    if asset.get("type_fields"):
-        payload["type_fields"] = asset["type_fields"]
+    # if asset.get("type_fields"):
+    #     payload["type_fields"] = asset["type_fields"]
     
     return payload
 
@@ -904,6 +910,54 @@ def post_release(release: dict[str, Any]) -> dict[str, Any]:
 
 
 # ============================================================================
+# GROUPS
+# ============================================================================
+
+def generate_group_payload(group: dict[str, Any]) -> dict[str, Any]:
+    """Generate a payload for creating a group via POST API."""
+    payload = {
+        "name": group["name"],
+    }
+    if group.get("description"):
+        payload["description"] = group["description"]
+    if group.get("members"):
+        payload["members"] = group["members"]
+    if group.get("observers"):
+        payload["observers"] = group["observers"]
+    if group.get("leaders"):
+        payload["leaders"] = group["leaders"]
+    return payload
+
+
+def post_group(group: dict[str, Any]) -> dict[str, Any]:
+    """Create a group in Freshservice via POST API."""
+    payload = generate_group_payload(group)
+    return post_to_freshservice("/groups", payload)
+
+
+# ============================================================================
+# DEPARTMENTS
+# ============================================================================
+
+def generate_department_payload(department: dict[str, Any]) -> dict[str, Any]:
+    """Generate a payload for creating a department via POST API."""
+    payload = {
+        "name": department["name"],
+    }
+    if department.get("description"):
+        payload["description"] = department["description"]
+    if department.get("domains"):
+        payload["domains"] = department["domains"]
+    return payload
+
+
+def post_department(department: dict[str, Any]) -> dict[str, Any]:
+    """Create a department in Freshservice via POST API."""
+    payload = generate_department_payload(department)
+    return post_to_freshservice("/departments", payload)
+
+
+# ============================================================================
 # LOCATIONS
 # ============================================================================
 
@@ -941,6 +995,22 @@ def generate_locations(count: int = 5) -> list[dict[str, Any]]:
         locations.append(location)
     
     return locations
+
+
+def generate_location_payload(location: dict[str, Any]) -> dict[str, Any]:
+    """Generate a payload for creating a location via POST API."""
+    payload = {
+        "name": location["name"],
+    }
+    if location.get("address"):
+        payload["address"] = location["address"]
+    return payload
+
+
+def post_location(location: dict[str, Any]) -> dict[str, Any]:
+    """Create a location in Freshservice via POST API."""
+    payload = generate_location_payload(location)
+    return post_to_freshservice("/locations", payload)
 
 
 # ============================================================================
@@ -986,6 +1056,24 @@ def generate_vendors(count: int = 5) -> list[dict[str, Any]]:
     return vendors
 
 
+def generate_vendor_payload(vendor: dict[str, Any]) -> dict[str, Any]:
+    """Generate a payload for creating a vendor via POST API."""
+    payload = {
+        "name": vendor["name"],
+    }
+    if vendor.get("description"):
+        payload["description"] = vendor["description"]
+    if vendor.get("address"):
+        payload["address"] = vendor["address"]
+    return payload
+
+
+def post_vendor(vendor: dict[str, Any]) -> dict[str, Any]:
+    """Create a vendor in Freshservice via POST API."""
+    payload = generate_vendor_payload(vendor)
+    return post_to_freshservice("/vendors", payload)
+
+
 # ============================================================================
 # PRODUCTS
 # ============================================================================
@@ -995,11 +1083,11 @@ def generate_products(count: int = 5) -> list[dict[str, Any]]:
     products = []
     
     product_data = [
-        ("Dell Latitude 5520", "Dell", 1),
-        ("MacBook Pro 14-inch", "Apple", 1),
-        ("HP EliteBook 840 G8", "HP", 1),
-        ("Dell UltraSharp U2722D", "Dell", 3),
-        ("Logitech MX Master 3", "Logitech", 4)
+        ("Dell Latitude 5520", "Dell", 58000460328),
+        ("MacBook Pro 14-inch", "Apple", 58000460328),
+        ("HP EliteBook 840 G8", "HP", 58000460328),
+        ("Dell UltraSharp U2722D", "Dell", 58000460328),
+        ("Logitech MX Master 3", "Logitech", 58000460328)
     ]
     
     statuses = ["In Production", "Retired", "Under Review"]
@@ -1023,6 +1111,26 @@ def generate_products(count: int = 5) -> list[dict[str, Any]]:
         products.append(product)
     
     return products
+
+
+def generate_product_payload(product: dict[str, Any]) -> dict[str, Any]:
+    """Generate a payload for creating a product via POST API."""
+    payload = {
+        "name": product["name"],
+    }
+    if product.get("manufacturer"):
+        payload["manufacturer"] = product["manufacturer"]
+    if product.get("asset_type_id"):
+        payload["asset_type_id"] = product["asset_type_id"]
+    if product.get("description"):
+        payload["description"] = product["description"]
+    return payload
+
+
+def post_product(product: dict[str, Any]) -> dict[str, Any]:
+    """Create a product in Freshservice via POST API."""
+    payload = generate_product_payload(product)
+    return post_to_freshservice("/products", payload)
 
 
 # ============================================================================
@@ -1053,7 +1161,7 @@ def generate_contracts(count: int = 3) -> list[dict[str, Any]]:
             "id": 7000000000 + i,
             "name": contract_names[i - 1],
             "description": f"{contract_names[i - 1]} - Enterprise contract for software and services.",
-            "vendor_id": None,
+            "vendor_id": 58000186100,
             "auto_renew": random.random() > 0.5,
             "notify_expiry": True,
             "notify_before": random.choice([30, 60, 90]),
@@ -1080,6 +1188,30 @@ def generate_contracts(count: int = 3) -> list[dict[str, Any]]:
     return contracts
 
 
+def generate_contract_payload(contract: dict[str, Any]) -> dict[str, Any]:
+    """Generate a payload for creating a contract via POST API."""
+    payload = {
+        "name": contract["name"],
+        "vendor_id": contract["vendor_id"],
+        "contract_type_id": contract["contract_type_id"],
+    }
+    if contract.get("start_date"):
+        payload["start_date"] = contract["start_date"]
+    if contract.get("end_date"):
+        payload["end_date"] = contract["end_date"]
+    if contract.get("cost"):
+        payload["cost"] = contract["cost"]
+    if contract.get("contract_number"):
+        payload["contract_number"] = contract["contract_number"]
+    return payload
+
+
+def post_contract(contract: dict[str, Any]) -> dict[str, Any]:
+    """Create a contract in Freshservice via POST API."""
+    payload = generate_contract_payload(contract)
+    return post_to_freshservice("/contracts", payload)
+
+
 # ============================================================================
 # PURCHASE ORDERS
 # ============================================================================
@@ -1095,13 +1227,13 @@ def generate_purchase_orders(count: int = 3) -> list[dict[str, Any]]:
             "id": 8000000000 + i,
             "name": f"PO for Q{random.randint(1, 4)} {2025} Equipment",
             "po_number": f"PO-{random.randint(10000, 99999)}",
-            "vendor_id": None,
+            "vendor_id": 58000186722,
             "department_id": None,
             "created_by": get_random_agent_id(),
             "expected_delivery_date": generate_date(days_ago=-random.randint(7, 30)),
             "shipping_address": "123 Main Street, New York, NY 10001",
             "billing_same_as_shipping": True,
-            "billing_address": None,
+            "billing_address": "123 Main Street, New York, NY 10001",
             "currency_code": "USD",
             "conversion_rate": 1.0,
             "discount_percentage": random.choice([0, 5, 10, 15]) if random.random() > 0.5 else None,
@@ -1125,6 +1257,31 @@ def generate_purchase_orders(count: int = 3) -> list[dict[str, Any]]:
         purchase_orders.append(purchase_order)
     
     return purchase_orders
+
+
+def generate_purchase_order_payload(po: dict[str, Any]) -> dict[str, Any]:
+    """Generate a payload for creating a purchase order via POST API."""
+    payload = {
+        "name": po["name"],
+        "po_number": po["po_number"],
+        "status": po["status"],
+        "billing_same_as_shipping": po["billing_same_as_shipping"],
+        "shipping_address": po["shipping_address"],
+        "billing_address": po["billing_address"],
+    }
+    if po.get("vendor_id"):
+        payload["vendor_id"] = po["vendor_id"]
+    if po.get("expected_delivery_date"):
+        payload["expected_delivery_date"] = po["expected_delivery_date"]
+    if po.get("currency_code"):
+        payload["currency_code"] = po["currency_code"]
+    return payload
+
+
+def post_purchase_order(po: dict[str, Any]) -> dict[str, Any]:
+    """Create a purchase order in Freshservice via POST API."""
+    payload = generate_purchase_order_payload(po)
+    return post_to_freshservice("/purchase_orders", payload)
 
 
 # ============================================================================
@@ -1176,6 +1333,10 @@ def generate_service_catalog_items(count: int = 5) -> list[dict[str, Any]]:
     return items
 
 
+# Note: Service catalog items are typically configured via admin, not API POST
+# The POST endpoint may not be available or may require special permissions
+
+
 # ============================================================================
 # SOLUTIONS (Knowledge Base Articles)
 # ============================================================================
@@ -1202,7 +1363,7 @@ def generate_solutions(count: int = 5) -> list[dict[str, Any]]:
             "description_text": f"{title}\n\n{description}\n\nThis article provides detailed instructions for {title.lower()}.",
             "status": random.choice([1, 2]),  # Draft, Published
             "approval_status": None,
-            "folder_id": random.randint(1, 5),
+            "folder_id": 58000009191,
             "category_id": random.randint(1, 5),
             "agent_id": get_random_agent_id(),
             "thumbs_up": random.randint(0, 100),
@@ -1218,6 +1379,27 @@ def generate_solutions(count: int = 5) -> list[dict[str, Any]]:
         solutions.append(solution)
     
     return solutions
+
+
+def generate_solution_payload(solution: dict[str, Any]) -> dict[str, Any]:
+    """Generate a payload for creating a solution article via POST API."""
+    payload = {
+        "title": solution["title"],
+        "description": solution["description"],
+        "folder_id": solution["folder_id"],
+        "status": solution["status"],
+    }
+    if solution.get("tags"):
+        payload["tags"] = solution["tags"]
+    if solution.get("keywords"):
+        payload["keywords"] = solution["keywords"]
+    return payload
+
+
+def post_solution(solution: dict[str, Any]) -> dict[str, Any]:
+    """Create a solution article in Freshservice via POST API."""
+    payload = generate_solution_payload(solution)
+    return post_to_freshservice("/solutions/articles", payload)
 
 
 # ============================================================================
@@ -1619,13 +1801,13 @@ def generate_announcements(count: int = 3) -> list[dict[str, Any]]:
         announcement = {
             "id": 15000000000 + i,
             "title": title,
-            "body": f"<div><h3>{title}</h3><p>{body}</p></div>",
-            "body_text": f"{title}\n\n{body}",
-            "visible_from": generate_iso_datetime(days_ago=visible_from_days),
-            "visible_till": generate_iso_datetime(days_ago=-random.randint(7, 30)) if random.random() > 0.5 else None,
-            "visibility": random.choice(["all", "agents", "groups"]),
+            "body_html": f"<div><h3>{title}</h3><p>{body}</p></div>",
+            "body": f"{title}\n\n{body}",
+            "visible_from": generate_future_iso_datetime(days=visible_from_days),
+            "visible_till": generate_future_iso_datetime(days=-random.randint(7, 30)) if random.random() > 0.5 else None,
+            "visibility": random.choice(["everyone","agents_only","grouped_visibility","requesters_only","none"]),
             "departments": [],
-            "groups": [],
+            "groups": [58000069979],
             "state": "active",
             "created_by": get_random_agent_id(),
             "additional_emails": [],
@@ -1637,6 +1819,26 @@ def generate_announcements(count: int = 3) -> list[dict[str, Any]]:
         announcements.append(announcement)
     
     return announcements
+
+
+def generate_announcement_payload(announcement: dict[str, Any]) -> dict[str, Any]:
+    """Generate a payload for creating an announcement via POST API."""
+    payload = {
+        "title": announcement["title"],
+        "body_html": announcement["body_html"],
+        "visible_from": announcement["visible_from"],
+    }
+    if announcement.get("visible_till"):
+        payload["visible_till"] = announcement["visible_till"]
+    if announcement.get("visibility"):
+        payload["visibility"] = announcement["visibility"]
+    return payload
+
+
+def post_announcement(announcement: dict[str, Any]) -> dict[str, Any]:
+    """Create an announcement in Freshservice via POST API."""
+    payload = generate_announcement_payload(announcement)
+    return post_to_freshservice("/announcements", payload)
 
 
 # ============================================================================
@@ -1767,38 +1969,140 @@ def post_all_dummy_data(
     problems_count: int = 2,
     changes_count: int = 2,
     releases_count: int = 1,
+    groups_count: int = 2,
+    departments_count: int = 2,
+    locations_count: int = 2,
+    vendors_count: int = 2,
+    products_count: int = 2,
+    contracts_count: int = 1,
+    purchase_orders_count: int = 1,
+    solutions_count: int = 2,
+    announcements_count: int = 1,
+    assets_count: int = 2,
+    requesters_count: int = 2,
     delay_between_requests: float = 0.5
 ) -> dict[str, list[dict[str, Any]]]:
     """
     Generate and post dummy data to Freshservice.
     
     Args:
-        tickets_count: Number of tickets to create
-        problems_count: Number of problems to create
-        changes_count: Number of changes to create
-        releases_count: Number of releases to create
+        Various count parameters for each object type
         delay_between_requests: Delay in seconds between API requests
         
     Returns:
         Dictionary containing API responses for each object type
     """
     results = {
+        "departments": [],
+        "locations": [],
+        "groups": [],
+        "vendors": [],
+        "products": [],
+        "contracts": [],
+        "requesters": [],
+        "assets": [],
         "tickets": [],
         "problems": [],
         "changes": [],
         "releases": [],
+        "solutions": [],
+        "announcements": [],
+        "purchase_orders": [],
         "time_entries": [],
         "conversations": [],
         "tasks": [],
     }
+    
+    step = 1
+    total_steps = 15
     
     print("=" * 60)
     print("POSTING DUMMY DATA TO FRESHSERVICE")
     print(f"Domain: {FRESHSERVICE_DOMAIN}")
     print("=" * 60)
     
-    # Create tickets
-    print(f"\n[1/4] Creating {tickets_count} tickets...")
+    # Create departments first (referenced by other objects)
+    print(f"\n[{step}/{total_steps}] Creating {departments_count} departments...")
+    departments = generate_departments(count=departments_count)
+    for i, dept in enumerate(departments, 1):
+        print(f"  Creating department {i}/{departments_count}: {dept['name']}...")
+        response = post_department(dept)
+        results["departments"].append(response)
+        time.sleep(delay_between_requests)
+    step += 1
+    
+    # Create locations
+    print(f"\n[{step}/{total_steps}] Creating {locations_count} locations...")
+    locations = generate_locations(count=locations_count)
+    for i, loc in enumerate(locations, 1):
+        print(f"  Creating location {i}/{locations_count}: {loc['name']}...")
+        response = post_location(loc)
+        results["locations"].append(response)
+        time.sleep(delay_between_requests)
+    step += 1
+    
+    # Create groups
+    # print(f"\n[{step}/{total_steps}] Creating {groups_count} groups...")
+    # groups = generate_groups(count=groups_count)
+    # for i, group in enumerate(groups, 1):
+    #     print(f"  Creating group {i}/{groups_count}: {group['name']}...")
+    #     response = post_group(group)
+    #     results["groups"].append(response)
+    #     time.sleep(delay_between_requests)
+    # step += 1
+    
+    # Create vendors
+    print(f"\n[{step}/{total_steps}] Creating {vendors_count} vendors...")
+    vendors = generate_vendors(count=vendors_count)
+    for i, vendor in enumerate(vendors, 1):
+        print(f"  Creating vendor {i}/{vendors_count}: {vendor['name']}...")
+        response = post_vendor(vendor)
+        results["vendors"].append(response)
+        time.sleep(delay_between_requests)
+    step += 1
+    
+    # Create products
+    print(f"\n[{step}/{total_steps}] Creating {products_count} products...")
+    products = generate_products(count=products_count)
+    for i, product in enumerate(products, 1):
+        print(f"  Creating product {i}/{products_count}: {product['name']}...")
+        response = post_product(product)
+        results["products"].append(response)
+        time.sleep(delay_between_requests)
+    step += 1
+    
+    # Create contracts
+    print(f"\n[{step}/{total_steps}] Creating {contracts_count} contracts...")
+    contracts = generate_contracts(count=contracts_count)
+    for i, contract in enumerate(contracts, 1):
+        print(f"  Creating contract {i}/{contracts_count}: {contract['name']}...")
+        response = post_contract(contract)
+        results["contracts"].append(response)
+        time.sleep(delay_between_requests)
+    step += 1
+    
+    # Create requesters
+    # print(f"\n[{step}/{total_steps}] Creating {requesters_count} requesters...")
+    # requesters = generate_requesters(count=requesters_count)
+    # for i, requester in enumerate(requesters, 1):
+    #     print(f"  Creating requester {i}/{requesters_count}: {requester['first_name']} {requester.get('last_name', '')}...")
+    #     response = post_requester(requester)
+    #     results["requesters"].append(response)
+    #     time.sleep(delay_between_requests)
+    # step += 1
+    
+    # Create assets
+    print(f"\n[{step}/{total_steps}] Creating {assets_count} assets...")
+    assets = generate_assets(count=assets_count)
+    for i, asset in enumerate(assets, 1):
+        print(f"  Creating asset {i}/{assets_count}: {asset['name']}...")
+        response = post_asset(asset)
+        results["assets"].append(response)
+        time.sleep(delay_between_requests)
+    step += 1
+    
+    # Create tickets with child objects
+    print(f"\n[{step}/{total_steps}] Creating {tickets_count} tickets...")
     tickets = generate_tickets(count=tickets_count)
     for i, ticket in enumerate(tickets, 1):
         print(f"  Creating ticket {i}/{tickets_count}: {ticket['subject'][:40]}...")
@@ -1806,7 +2110,7 @@ def post_all_dummy_data(
         results["tickets"].append(response)
         time.sleep(delay_between_requests)
         
-        # If ticket was created successfully, add time entries and conversations
+        # If ticket was created successfully, add time entries, conversations, and tasks
         if "ticket" in response:
             created_ticket_id = response["ticket"]["id"]
             
@@ -1834,9 +2138,10 @@ def post_all_dummy_data(
                 task_response = post_task(created_ticket_id, "ticket", task)
                 results["tasks"].append(task_response)
                 time.sleep(delay_between_requests)
+    step += 1
     
     # Create problems
-    print(f"\n[2/4] Creating {problems_count} problems...")
+    print(f"\n[{step}/{total_steps}] Creating {problems_count} problems...")
     problems = generate_problems(count=problems_count)
     for i, problem in enumerate(problems, 1):
         print(f"  Creating problem {i}/{problems_count}: {problem['subject'][:40]}...")
@@ -1853,9 +2158,10 @@ def post_all_dummy_data(
                 task_response = post_task(created_problem_id, "problem", task)
                 results["tasks"].append(task_response)
                 time.sleep(delay_between_requests)
+    step += 1
     
     # Create changes
-    print(f"\n[3/4] Creating {changes_count} changes...")
+    print(f"\n[{step}/{total_steps}] Creating {changes_count} changes...")
     changes = generate_changes(count=changes_count)
     for i, change in enumerate(changes, 1):
         print(f"  Creating change {i}/{changes_count}: {change['subject'][:40]}...")
@@ -1872,14 +2178,45 @@ def post_all_dummy_data(
                 task_response = post_task(created_change_id, "change", task)
                 results["tasks"].append(task_response)
                 time.sleep(delay_between_requests)
+    step += 1
     
     # Create releases
-    print(f"\n[4/4] Creating {releases_count} releases...")
+    print(f"\n[{step}/{total_steps}] Creating {releases_count} releases...")
     releases = generate_releases(count=releases_count)
     for i, release in enumerate(releases, 1):
         print(f"  Creating release {i}/{releases_count}: {release['subject'][:40]}...")
         response = post_release(release)
         results["releases"].append(response)
+        time.sleep(delay_between_requests)
+    step += 1
+    
+    # Create solutions (knowledge base articles)
+    print(f"\n[{step}/{total_steps}] Creating {solutions_count} solutions...")
+    solutions = generate_solutions(count=solutions_count)
+    for i, solution in enumerate(solutions, 1):
+        print(f"  Creating solution {i}/{solutions_count}: {solution['title'][:40]}...")
+        response = post_solution(solution)
+        results["solutions"].append(response)
+        time.sleep(delay_between_requests)
+    step += 1
+    
+    # Create announcements
+    print(f"\n[{step}/{total_steps}] Creating {announcements_count} announcements...")
+    announcements = generate_announcements(count=announcements_count)
+    for i, announcement in enumerate(announcements, 1):
+        print(f"  Creating announcement {i}/{announcements_count}: {announcement['title'][:40]}...")
+        response = post_announcement(announcement)
+        results["announcements"].append(response)
+        time.sleep(delay_between_requests)
+    step += 1
+    
+    # Create purchase orders
+    print(f"\n[{step}/{total_steps}] Creating {purchase_orders_count} purchase orders...")
+    purchase_orders = generate_purchase_orders(count=purchase_orders_count)
+    for i, po in enumerate(purchase_orders, 1):
+        print(f"  Creating purchase order {i}/{purchase_orders_count}: {po['name'][:40]}...")
+        response = post_purchase_order(po)
+        results["purchase_orders"].append(response)
         time.sleep(delay_between_requests)
     
     # Print summary

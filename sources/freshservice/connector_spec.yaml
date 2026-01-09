@@ -1,0 +1,33 @@
+# Freshservice Community Connector Spec
+# This file defines the specification for the connector including
+# connection parameters and allowlist options.
+
+# ============================================================================
+# Connection Parameters
+# These are provided when creating the Unity Catalog connection.
+# ============================================================================
+connection:
+  parameters:
+    - name: api_key
+      type: string
+      required: true
+      description: >
+        API key used for Freshservice REST API authentication.
+        The API key uses Basic Authentication with the key as username and 'X' as password.
+        Generate your API key from Freshservice Profile Settings.
+
+    - name: domain
+      type: string
+      required: true
+      description: >
+        Your Freshservice subdomain (e.g., 'acme' for acme.freshservice.com).
+        Do not include the full URL or '.freshservice.com' suffix.
+
+# ============================================================================
+# External Options Allowlist
+# These table-specific options must be included in the externalOptionsAllowList
+# parameter of the UC connection to allow them to be passed through.
+# Use a comma-separated string of option names.
+# ============================================================================
+external_options_allowlist: "per_page,max_pages_per_batch,lookback_seconds,start_date,max_parents,max_parents_per_type"
+

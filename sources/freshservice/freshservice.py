@@ -17,123 +17,29 @@ from pyspark.sql.types import (
 )
 
 
-class LakeflowConnect:
-    def __init__(self, options: dict[str, str]) -> None:
-        """
-        Initialize the Freshservice connector with connection-level options.
+# Reusable nested structs
+ATTACHMENT_STRUCT = StructType([
+    StructField("id", LongType(), True),
+    StructField("content_type", StringType(), True),
+    StructField("size", LongType(), True),
+    StructField("name", StringType(), True),
+    StructField("attachment_url", StringType(), True),
+    StructField("created_at", StringType(), True),
+    StructField("updated_at", StringType(), True),
+])
 
-        Expected options:
-            - api_key: API key used for Freshservice REST API authentication.
-            - domain: Your Freshservice domain (e.g., 'acme' for acme.freshservice.com).
-        """
-        api_key = options.get("api_key")
-        domain = options.get("domain")
-        
-        if not api_key:
-            raise ValueError("Freshservice connector requires 'api_key' in options")
-        if not domain:
-            raise ValueError("Freshservice connector requires 'domain' in options")
+ADDRESS_STRUCT = StructType([
+    StructField("line1", StringType(), True),
+    StructField("line2", StringType(), True),
+    StructField("city", StringType(), True),
+    StructField("state", StringType(), True),
+    StructField("country", StringType(), True),
+    StructField("zipcode", StringType(), True),
+])
 
-        self.domain = domain.strip().rstrip(".freshservice.com")
-        self.base_url = f"https://{self.domain}.freshservice.com/api/v2"
-        
-        # Configure Basic Authentication (API_KEY:X)
-        auth_string = f"{api_key}:X"
-        encoded_auth = base64.b64encode(auth_string.encode()).decode()
-        
-        self._session = requests.Session()
-        self._session.headers.update({
-            "Authorization": f"Basic {encoded_auth}",
-            "Content-Type": "application/json",
-        })
-
-    def list_tables(self) -> list[str]:
-        """
-        List names of all tables supported by this connector.
-        """
-        return [
-            "tickets",
-            "agents",
-            "requesters",
-            "groups",
-            "departments",
-            "assets",
-            "problems",
-            "changes",
-            "releases",
-            "locations",
-            "vendors",
-            "products",
-            "contracts",
-            "purchase_orders",
-            "service_catalog_items",
-            #"solutions",
-            "roles",
-            "sla_policies",
-            "business_hours",
-            "announcements",
-            "ticket_fields",
-        ]
-
-    def _get_attachment_struct(self) -> StructType:
-        """Return the attachment struct schema."""
-        return StructType([
-            StructField("id", LongType(), True),
-            StructField("content_type", StringType(), True),
-            StructField("size", LongType(), True),
-            StructField("name", StringType(), True),
-            StructField("attachment_url", StringType(), True),
-            StructField("created_at", StringType(), True),
-            StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_address_struct(self) -> StructType:
-        """Return the address struct schema."""
-        return StructType([
-            StructField("line1", StringType(), True),
-            StructField("line2", StringType(), True),
-            StructField("city", StringType(), True),
-            StructField("state", StringType(), True),
-            StructField("country", StringType(), True),
-            StructField("zipcode", StringType(), True),
-        ])
-
-    def get_table_schema(self, table_name: str, table_options: dict[str, str]) -> StructType:
-        """
-        Fetch the schema of a table.
-        """
-        schema_map = {
-            "tickets": self._get_tickets_schema,
-            "agents": self._get_agents_schema,
-            "requesters": self._get_requesters_schema,
-            "groups": self._get_groups_schema,
-            "departments": self._get_departments_schema,
-            "assets": self._get_assets_schema,
-            "problems": self._get_problems_schema,
-            "changes": self._get_changes_schema,
-            "releases": self._get_releases_schema,
-            "locations": self._get_locations_schema,
-            "vendors": self._get_vendors_schema,
-            "products": self._get_products_schema,
-            "contracts": self._get_contracts_schema,
-            "purchase_orders": self._get_purchase_orders_schema,
-            "service_catalog_items": self._get_service_catalog_items_schema,
-            "solutions": self._get_solutions_schema,
-            "roles": self._get_roles_schema,
-            "sla_policies": self._get_sla_policies_schema,
-            "business_hours": self._get_business_hours_schema,
-            "announcements": self._get_announcements_schema,
-            "ticket_fields": self._get_ticket_fields_schema,
-        }
-
-        if table_name not in schema_map:
-            raise ValueError(f"Unsupported table: {table_name!r}")
-        return schema_map[table_name]()
-
-    def _get_tickets_schema(self) -> StructType:
-        """Return the tickets table schema."""
-        attachment_struct = self._get_attachment_struct()
-        return StructType([
+TABLE_CONFIG = {
+    "tickets": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("workspace_id", LongType(), True),
             StructField("subject", StringType(), True),
@@ -168,16 +74,23 @@ class LakeflowConnect:
             StructField("fwd_emails", ArrayType(StringType(), True), True),
             StructField("reply_cc_emails", ArrayType(StringType(), True), True),
             StructField("to_emails", ArrayType(StringType(), True), True),
-            StructField("attachments", ArrayType(attachment_struct, True), True),
+            StructField("attachments", ArrayType(ATTACHMENT_STRUCT, True), True),
             StructField("custom_fields", MapType(StringType(), StringType(), True), True),
             StructField("tags", ArrayType(StringType(), True), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_agents_schema(self) -> StructType:
-        """Return the agents table schema."""
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "cursor_field": "updated_at",
+            "ingestion_type": "cdc",
+        },
+        "endpoint": "/tickets",
+        "ingestion_type": "cdc",
+        "response_key": "tickets",
+    },
+    "agents": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("first_name", StringType(), True),
             StructField("last_name", StringType(), True),
@@ -203,11 +116,18 @@ class LakeflowConnect:
             StructField("custom_fields", MapType(StringType(), StringType(), True), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_requesters_schema(self) -> StructType:
-        """Return the requesters table schema."""
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "cursor_field": "updated_at",
+            "ingestion_type": "cdc",
+        },
+        "endpoint": "/agents",
+        "ingestion_type": "cdc",
+        "response_key": "agents",
+    },
+    "requesters": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("first_name", StringType(), True),
             StructField("last_name", StringType(), True),
@@ -230,11 +150,18 @@ class LakeflowConnect:
             StructField("custom_fields", MapType(StringType(), StringType(), True), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_groups_schema(self) -> StructType:
-        """Return the groups table schema."""
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "cursor_field": "updated_at",
+            "ingestion_type": "cdc",
+        },
+        "endpoint": "/requesters",
+        "ingestion_type": "cdc",
+        "response_key": "requesters",
+    },
+    "groups": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("name", StringType(), True),
             StructField("description", StringType(), True),
@@ -250,11 +177,17 @@ class LakeflowConnect:
             StructField("approval_required", BooleanType(), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_departments_schema(self) -> StructType:
-        """Return the departments table schema."""
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/groups",
+        "ingestion_type": "snapshot",
+        "response_key": "groups",
+    },
+    "departments": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("name", StringType(), True),
             StructField("description", StringType(), True),
@@ -264,11 +197,17 @@ class LakeflowConnect:
             StructField("custom_fields", MapType(StringType(), StringType(), True), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_assets_schema(self) -> StructType:
-        """Return the assets table schema."""
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/departments",
+        "ingestion_type": "snapshot",
+        "response_key": "departments",
+    },
+    "assets": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("display_id", LongType(), True),
             StructField("name", StringType(), True),
@@ -289,11 +228,18 @@ class LakeflowConnect:
             StructField("type_fields", MapType(StringType(), StringType(), True), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_problems_schema(self) -> StructType:
-        """Return the problems table schema."""
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "cursor_field": "updated_at",
+            "ingestion_type": "cdc",
+        },
+        "endpoint": "/assets",
+        "ingestion_type": "cdc",
+        "response_key": "assets",
+    },
+    "problems": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("workspace_id", LongType(), True),
             StructField("agent_id", LongType(), True),
@@ -315,11 +261,18 @@ class LakeflowConnect:
             StructField("custom_fields", MapType(StringType(), StringType(), True), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_changes_schema(self) -> StructType:
-        """Return the changes table schema."""
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "cursor_field": "updated_at",
+            "ingestion_type": "cdc",
+        },
+        "endpoint": "/problems",
+        "ingestion_type": "cdc",
+        "response_key": "problems",
+    },
+    "changes": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("workspace_id", LongType(), True),
             StructField("agent_id", LongType(), True),
@@ -344,11 +297,18 @@ class LakeflowConnect:
             StructField("custom_fields", MapType(StringType(), StringType(), True), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_releases_schema(self) -> StructType:
-        """Return the releases table schema."""
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "cursor_field": "updated_at",
+            "ingestion_type": "cdc",
+        },
+        "endpoint": "/changes",
+        "ingestion_type": "cdc",
+        "response_key": "changes",
+    },
+    "releases": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("workspace_id", LongType(), True),
             StructField("agent_id", LongType(), True),
@@ -371,38 +331,55 @@ class LakeflowConnect:
             StructField("custom_fields", MapType(StringType(), StringType(), True), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_locations_schema(self) -> StructType:
-        """Return the locations table schema."""
-        address_struct = self._get_address_struct()
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "cursor_field": "updated_at",
+            "ingestion_type": "cdc",
+        },
+        "endpoint": "/releases",
+        "ingestion_type": "cdc",
+        "response_key": "releases",
+    },
+    "locations": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("name", StringType(), True),
             StructField("parent_location_id", LongType(), True),
             StructField("primary_contact_id", LongType(), True),
-            StructField("address", address_struct, True),
+            StructField("address", ADDRESS_STRUCT, True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_vendors_schema(self) -> StructType:
-        """Return the vendors table schema."""
-        address_struct = self._get_address_struct()
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/locations",
+        "ingestion_type": "snapshot",
+        "response_key": "locations",
+    },
+    "vendors": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("name", StringType(), True),
             StructField("description", StringType(), True),
             StructField("primary_contact_id", LongType(), True),
-            StructField("address", address_struct, True),
+            StructField("address", ADDRESS_STRUCT, True),
             StructField("custom_fields", MapType(StringType(), StringType(), True), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_products_schema(self) -> StructType:
-        """Return the products table schema."""
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/vendors",
+        "ingestion_type": "snapshot",
+        "response_key": "vendors",
+    },
+    "products": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("name", StringType(), True),
             StructField("asset_type_id", LongType(), True),
@@ -413,16 +390,17 @@ class LakeflowConnect:
             StructField("description", StringType(), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_contracts_schema(self) -> StructType:
-        """Return the contracts table schema."""
-        item_cost_detail_struct = StructType([
-            StructField("item_name", StringType(), True),
-            StructField("cost", DoubleType(), True),
-            StructField("count", LongType(), True),
-        ])
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/products",
+        "ingestion_type": "snapshot",
+        "response_key": "products",
+    },
+    "contracts": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("name", StringType(), True),
             StructField("description", StringType(), True),
@@ -444,24 +422,24 @@ class LakeflowConnect:
             StructField("license_type", StringType(), True),
             StructField("billing_cycle", StringType(), True),
             StructField("license_key", StringType(), True),
-            StructField("item_cost_details", ArrayType(item_cost_detail_struct, True), True),
+            StructField("item_cost_details", ArrayType(StructType([
+                StructField("item_name", StringType(), True),
+                StructField("cost", DoubleType(), True),
+                StructField("count", LongType(), True),
+            ]), True), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_purchase_orders_schema(self) -> StructType:
-        """Return the purchase_orders table schema."""
-        purchase_item_struct = StructType([
-            StructField("item_type", LongType(), True),
-            StructField("item_name", StringType(), True),
-            StructField("item_id", LongType(), True),
-            StructField("description", StringType(), True),
-            StructField("cost", DoubleType(), True),
-            StructField("quantity", LongType(), True),
-            StructField("received", LongType(), True),
-            StructField("tax_percentage", DoubleType(), True),
-        ])
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/contracts",
+        "ingestion_type": "snapshot",
+        "response_key": "contracts",
+    },
+    "purchase_orders": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("name", StringType(), True),
             StructField("po_number", StringType(), True),
@@ -478,26 +456,31 @@ class LakeflowConnect:
             StructField("tax_percentage", DoubleType(), True),
             StructField("shipping_cost", DoubleType(), True),
             StructField("custom_fields", MapType(StringType(), StringType(), True), True),
-            StructField("purchase_items", ArrayType(purchase_item_struct, True), True),
+            StructField("purchase_items", ArrayType(StructType([
+                StructField("item_type", LongType(), True),
+                StructField("item_name", StringType(), True),
+                StructField("item_id", LongType(), True),
+                StructField("description", StringType(), True),
+                StructField("cost", DoubleType(), True),
+                StructField("quantity", LongType(), True),
+                StructField("received", LongType(), True),
+                StructField("tax_percentage", DoubleType(), True),
+            ]), True), True),
             StructField("status", LongType(), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_service_catalog_items_schema(self) -> StructType:
-        """Return the service_catalog_items table schema."""
-        custom_field_struct = StructType([
-            StructField("name", StringType(), True),
-            StructField("label", StringType(), True),
-            StructField("field_type", StringType(), True),
-            StructField("required", BooleanType(), True),
-        ])
-        child_item_struct = StructType([
-            StructField("id", LongType(), True),
-            StructField("name", StringType(), True),
-            StructField("quantity", LongType(), True),
-        ])
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "cursor_field": "updated_at",
+            "ingestion_type": "cdc",
+        },
+        "endpoint": "/purchase_orders",
+        "ingestion_type": "cdc",
+        "response_key": "purchase_orders",
+    },
+    "service_catalog_items": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("name", StringType(), True),
             StructField("display_id", LongType(), True),
@@ -517,59 +500,80 @@ class LakeflowConnect:
             StructField("create_child", BooleanType(), True),
             StructField("configs", MapType(StringType(), StringType(), True), True),
             StructField("icon_name", StringType(), True),
-            StructField("custom_fields", ArrayType(custom_field_struct, True), True),
-            StructField("child_items", ArrayType(child_item_struct, True), True),
+            StructField("custom_fields", ArrayType(StructType([
+                StructField("name", StringType(), True),
+                StructField("label", StringType(), True),
+                StructField("field_type", StringType(), True),
+                StructField("required", BooleanType(), True),
+            ]), True), True),
+            StructField("child_items", ArrayType(StructType([
+                StructField("id", LongType(), True),
+                StructField("name", StringType(), True),
+                StructField("quantity", LongType(), True),
+            ]), True), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_solutions_schema(self) -> StructType:
-        """Return the solutions table schema."""
-        attachment_struct = self._get_attachment_struct()
-        seo_data_struct = StructType([
-            StructField("meta_title", StringType(), True),
-            StructField("meta_description", StringType(), True),
-        ])
-        return StructType([
-            StructField("id", LongType(), False),
-            StructField("title", StringType(), True),
-            StructField("description", StringType(), True),
-            StructField("description_text", StringType(), True),
-            StructField("status", LongType(), True),
-            StructField("approval_status", LongType(), True),
-            StructField("folder_id", LongType(), True),
-            StructField("category_id", LongType(), True),
-            StructField("agent_id", LongType(), True),
-            StructField("thumbs_up", LongType(), True),
-            StructField("thumbs_down", LongType(), True),
-            StructField("hits", LongType(), True),
-            StructField("tags", ArrayType(StringType(), True), True),
-            StructField("keywords", ArrayType(StringType(), True), True),
-            StructField("seo_data", seo_data_struct, True),
-            StructField("attachments", ArrayType(attachment_struct, True), True),
-            StructField("created_at", StringType(), True),
-            StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_roles_schema(self) -> StructType:
-        """Return the roles table schema."""
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/service_catalog/items",
+        "ingestion_type": "snapshot",
+        "response_key": "service_items",
+    },
+    # "solutions": {
+    #     "schema": StructType([
+    #         StructField("id", LongType(), False),
+    #         StructField("title", StringType(), True),
+    #         StructField("description", StringType(), True),
+    #         StructField("description_text", StringType(), True),
+    #         StructField("status", LongType(), True),
+    #         StructField("approval_status", LongType(), True),
+    #         StructField("folder_id", LongType(), True),
+    #         StructField("category_id", LongType(), True),
+    #         StructField("agent_id", LongType(), True),
+    #         StructField("thumbs_up", LongType(), True),
+    #         StructField("thumbs_down", LongType(), True),
+    #         StructField("hits", LongType(), True),
+    #         StructField("tags", ArrayType(StringType(), True), True),
+    #         StructField("keywords", ArrayType(StringType(), True), True),
+    #         StructField("seo_data", StructType([
+    #             StructField("meta_title", StringType(), True),
+    #             StructField("meta_description", StringType(), True),
+    #         ]), True),
+    #         StructField("attachments", ArrayType(ATTACHMENT_STRUCT, True), True),
+    #         StructField("created_at", StringType(), True),
+    #         StructField("updated_at", StringType(), True),
+    #     ]),
+    #     "metadata": {
+    #         "primary_keys": ["id"],
+    #         "cursor_field": "updated_at",
+    #         "ingestion_type": "cdc",
+    #     },
+    #     "endpoint": "/solutions/articles",
+    #     "ingestion_type": "cdc",
+    #     "response_key": "articles",
+    # },
+    "roles": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("name", StringType(), True),
             StructField("description", StringType(), True),
             StructField("default", BooleanType(), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_sla_policies_schema(self) -> StructType:
-        """Return the sla_policies table schema."""
-        sla_target_struct = StructType([
-            StructField("priority", LongType(), True),
-            StructField("respond_within", LongType(), True),
-            StructField("resolve_within", LongType(), True),
-        ])
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/roles",
+        "ingestion_type": "snapshot",
+        "response_key": "roles",
+    },
+    "sla_policies": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("name", StringType(), True),
             StructField("description", StringType(), True),
@@ -578,33 +582,48 @@ class LakeflowConnect:
             StructField("active", BooleanType(), True),
             StructField("deleted", BooleanType(), True),
             StructField("applicable_to", MapType(StringType(), StringType(), True), True),
-            StructField("sla_targets", ArrayType(sla_target_struct, True), True),
+            StructField("sla_targets", ArrayType(StructType([
+                StructField("priority", LongType(), True),
+                StructField("respond_within", LongType(), True),
+                StructField("resolve_within", LongType(), True),
+            ]), True), True),
             StructField("escalation", MapType(StringType(), StringType(), True), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_business_hours_schema(self) -> StructType:
-        """Return the business_hours table schema."""
-        holiday_struct = StructType([
-            StructField("holiday_name", StringType(), True),
-            StructField("holiday_date", StringType(), True),
-        ])
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/sla_policies",
+        "ingestion_type": "snapshot",
+        "response_key": "sla_policies",
+    },
+    "business_hours": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("name", StringType(), True),
             StructField("description", StringType(), True),
             StructField("is_default", BooleanType(), True),
             StructField("time_zone", StringType(), True),
             StructField("service_desk_hours", MapType(StringType(), StringType(), True), True),
-            StructField("list_of_holidays", ArrayType(holiday_struct, True), True),
+            StructField("list_of_holidays", ArrayType(StructType([
+                StructField("holiday_name", StringType(), True),
+                StructField("holiday_date", StringType(), True),
+            ]), True), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_announcements_schema(self) -> StructType:
-        """Return the announcements table schema."""
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/business_hours",
+        "ingestion_type": "snapshot",
+        "response_key": "business_hours",
+    },
+    "announcements": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("title", StringType(), True),
             StructField("body_html", StringType(), True),
@@ -621,21 +640,17 @@ class LakeflowConnect:
             StructField("send_email", BooleanType(), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
-
-    def _get_ticket_fields_schema(self) -> StructType:
-        """Return the ticket_fields table schema."""
-        choice_struct = StructType([
-            StructField("id", LongType(), True),
-            StructField("value", StringType(), True),
-            StructField("position", LongType(), True),
-        ])
-        nested_field_struct = StructType([
-            StructField("name", StringType(), True),
-            StructField("label", StringType(), True),
-            StructField("type", StringType(), True),
-        ])
-        return StructType([
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/announcements",
+        "ingestion_type": "snapshot",
+        "response_key": "announcements",
+    },
+    "ticket_fields": {
+        "schema": StructType([
             StructField("id", LongType(), False),
             StructField("workspace_id", LongType(), True),
             StructField("name", StringType(), True),
@@ -649,116 +664,86 @@ class LakeflowConnect:
             StructField("visible_in_portal", BooleanType(), True),
             StructField("editable_in_portal", BooleanType(), True),
             StructField("required_in_portal", BooleanType(), True),
-            StructField("choices", ArrayType(choice_struct, True), True),
-            StructField("nested_fields", ArrayType(nested_field_struct, True), True),
+            StructField("choices", ArrayType(StructType([
+                StructField("id", LongType(), True),
+                StructField("value", StringType(), True),
+                StructField("position", LongType(), True),
+            ]), True), True),
+            StructField("nested_fields", ArrayType(StructType([
+                StructField("name", StringType(), True),
+                StructField("label", StringType(), True),
+                StructField("type", StringType(), True),
+            ]), True), True),
             StructField("sections", ArrayType(MapType(StringType(), StringType(), True), True), True),
             StructField("created_at", StringType(), True),
             StructField("updated_at", StringType(), True),
-        ])
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/ticket_form_fields",
+        "ingestion_type": "snapshot",
+        "response_key": "ticket_fields",
+    },
+}
+
+class LakeflowConnect:
+    def __init__(self, options: dict[str, str]) -> None:
+        """
+        Initialize the Freshservice connector with connection-level options.
+
+        Expected options:
+            - api_key: API key used for Freshservice REST API authentication.
+            - domain: Your Freshservice domain (e.g., 'acme' for acme.freshservice.com).
+        """
+        api_key = options.get("api_key")
+        domain = options.get("domain")
+        
+        if not api_key:
+            raise ValueError("Freshservice connector requires 'api_key' in options")
+        if not domain:
+            raise ValueError("Freshservice connector requires 'domain' in options")
+
+        self.domain = domain.strip().rstrip(".freshservice.com")
+        self.base_url = f"https://{self.domain}.freshservice.com/api/v2"
+        
+        # Configure Basic Authentication (API_KEY:X)
+        auth_string = f"{api_key}:X"
+        encoded_auth = base64.b64encode(auth_string.encode()).decode()
+        
+        self._session = requests.Session()
+        self._session.headers.update({
+            "Authorization": f"Basic {encoded_auth}",
+            "Content-Type": "application/json",
+        })
+
+    def list_tables(self) -> list[str]:
+        """
+        List names of all tables supported by this connector.
+        """
+        return list[str](TABLE_CONFIG.keys())
+
+
+    def get_table_schema(self, table_name: str, table_options: dict[str, str]) -> StructType:
+        """
+        Fetch the schema of a table.
+        """
+        if table_name not in TABLE_CONFIG:
+            raise ValueError(f"Unsupported table: {table_name!r}")
+
+        return TABLE_CONFIG[table_name]["schema"]
+
 
     def read_table_metadata(self, table_name: str, table_options: dict[str, str]) -> dict:
         """
         Fetch metadata for the given table.
         """
-        metadata_map = {
-            "tickets": {
-                "primary_keys": ["id"],
-                "cursor_field": "updated_at",
-                "ingestion_type": "cdc",
-            },
-            "agents": {
-                "primary_keys": ["id"],
-                "cursor_field": "updated_at",
-                "ingestion_type": "cdc",
-            },
-            "requesters": {
-                "primary_keys": ["id"],
-                "cursor_field": "updated_at",
-                "ingestion_type": "cdc",
-            },
-            "groups": {
-                "primary_keys": ["id"],
-                "ingestion_type": "snapshot",
-            },
-            "departments": {
-                "primary_keys": ["id"],
-                "ingestion_type": "snapshot",
-            },
-            "assets": {
-                "primary_keys": ["id"],
-                "cursor_field": "updated_at",
-                "ingestion_type": "cdc",
-            },
-            "problems": {
-                "primary_keys": ["id"],
-                "cursor_field": "updated_at",
-                "ingestion_type": "cdc",
-            },
-            "changes": {
-                "primary_keys": ["id"],
-                "cursor_field": "updated_at",
-                "ingestion_type": "cdc",
-            },
-            "releases": {
-                "primary_keys": ["id"],
-                "cursor_field": "updated_at",
-                "ingestion_type": "cdc",
-            },
-            "locations": {
-                "primary_keys": ["id"],
-                "ingestion_type": "snapshot",
-            },
-            "vendors": {
-                "primary_keys": ["id"],
-                "ingestion_type": "snapshot",
-            },
-            "products": {
-                "primary_keys": ["id"],
-                "ingestion_type": "snapshot",
-            },
-            "contracts": {
-                "primary_keys": ["id"],
-                "ingestion_type": "snapshot",
-            },
-            "purchase_orders": {
-                "primary_keys": ["id"],
-                "cursor_field": "updated_at",
-                "ingestion_type": "cdc",
-            },
-            "service_catalog_items": {
-                "primary_keys": ["id"],
-                "ingestion_type": "snapshot",
-            },
-            "solutions": {
-                "primary_keys": ["id"],
-                "cursor_field": "updated_at",
-                "ingestion_type": "cdc",
-            },
-            "roles": {
-                "primary_keys": ["id"],
-                "ingestion_type": "snapshot",
-            },
-            "sla_policies": {
-                "primary_keys": ["id"],
-                "ingestion_type": "snapshot",
-            },
-            "business_hours": {
-                "primary_keys": ["id"],
-                "ingestion_type": "snapshot",
-            },
-            "announcements": {
-                "primary_keys": ["id"],
-                "ingestion_type": "snapshot",
-            },
-            "ticket_fields": {
-                "primary_keys": ["id"],
-                "ingestion_type": "snapshot",
-            },
-        }
-
-        if table_name not in metadata_map:
+        if table_name not in TABLE_CONFIG:
             raise ValueError(f"Unsupported table: {table_name!r}")
-        return metadata_map[table_name]
+
+        return TABLE_CONFIG[table_name]["metadata"]
+        
 
     def read_table(
         self, table_name: str, start_offset: dict, table_options: dict[str, str]
@@ -766,240 +751,29 @@ class LakeflowConnect:
         """
         Read records from a table and return raw JSON-like dictionaries.
         """
-        reader_map = {
-            "tickets": self._read_tickets,
-            "agents": self._read_agents,
-            "requesters": self._read_requesters,
-            "groups": self._read_groups,
-            "departments": self._read_departments,
-            "assets": self._read_assets,
-            "problems": self._read_problems,
-            "changes": self._read_changes,
-            "releases": self._read_releases,
-            "locations": self._read_locations,
-            "vendors": self._read_vendors,
-            "products": self._read_products,
-            "contracts": self._read_contracts,
-            "purchase_orders": self._read_purchase_orders,
-            "service_catalog_items": self._read_service_catalog_items,
-            "solutions": self._read_solutions,
-            "roles": self._read_roles,
-            "sla_policies": self._read_sla_policies,
-            "business_hours": self._read_business_hours,
-            "announcements": self._read_announcements,
-            "ticket_fields": self._read_ticket_fields,
-        }
 
-        if table_name not in reader_map:
+        if table_name not in TABLE_CONFIG:
             raise ValueError(f"Unsupported table: {table_name!r}")
-        return reader_map[table_name](start_offset, table_options)
 
-    def _read_tickets(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the tickets table."""
-        return self._read_paginated_with_updated_since(
-            endpoint="/tickets",
-            start_offset=start_offset,
-            table_options=table_options,
-            cursor_field="updated_at",
-        )
+        metadata = self.read_table_metadata(table_name, table_options)
 
-    def _read_agents(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the agents table."""
-        return self._read_paginated_with_updated_since(
-            endpoint="/agents",
-            start_offset=start_offset,
-            table_options=table_options,
-            cursor_field="updated_at",
-        )
+        if metadata["ingestion_type"] == "cdc":
+            return self._read_paginated_with_updated_since(
+                endpoint=TABLE_CONFIG[table_name]["endpoint"],
+                start_offset=start_offset,
+                table_options=table_options,
+                cursor_field=metadata["cursor_field"],
+                response_key=TABLE_CONFIG[table_name]["response_key"],
+            )
+        elif metadata["ingestion_type"] == "snapshot":
+            return self._read_paginated_snapshot(
+                endpoint=TABLE_CONFIG[table_name]["endpoint"],
+                table_options=table_options,
+                response_key=TABLE_CONFIG[table_name]["response_key"],
+            )
+        else:
+            raise ValueError(f"Unsupported ingestion type: {metadata['ingestion_type']!r}")
 
-    def _read_requesters(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the requesters table."""
-        return self._read_paginated_with_updated_since(
-            endpoint="/requesters",
-            start_offset=start_offset,
-            table_options=table_options,
-            cursor_field="updated_at",
-        )
-
-    def _read_groups(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the groups table."""
-        return self._read_paginated_snapshot(
-            endpoint="/groups",
-            table_options=table_options,
-        )
-
-    def _read_departments(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the departments table."""
-        return self._read_paginated_snapshot(
-            endpoint="/departments",
-            table_options=table_options,
-        )
-
-    def _read_assets(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the assets table."""
-        return self._read_paginated_with_updated_since(
-            endpoint="/assets",
-            start_offset=start_offset,
-            table_options=table_options,
-            cursor_field="updated_at",
-        )
-
-    def _read_problems(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the problems table."""
-        return self._read_paginated_with_updated_since(
-            endpoint="/problems",
-            start_offset=start_offset,
-            table_options=table_options,
-            cursor_field="updated_at",
-        )
-
-    def _read_changes(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the changes table."""
-        return self._read_paginated_with_updated_since(
-            endpoint="/changes",
-            start_offset=start_offset,
-            table_options=table_options,
-            cursor_field="updated_at",
-        )
-
-    def _read_releases(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the releases table."""
-        return self._read_paginated_with_updated_since(
-            endpoint="/releases",
-            start_offset=start_offset,
-            table_options=table_options,
-            cursor_field="updated_at",
-        )
-
-    def _read_locations(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the locations table."""
-        return self._read_paginated_snapshot(
-            endpoint="/locations",
-            table_options=table_options,
-        )
-
-    def _read_vendors(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the vendors table."""
-        return self._read_paginated_snapshot(
-            endpoint="/vendors",
-            table_options=table_options,
-        )
-
-    def _read_products(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the products table."""
-        return self._read_paginated_snapshot(
-            endpoint="/products",
-            table_options=table_options,
-        )
-
-    def _read_contracts(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the contracts table."""
-        return self._read_paginated_snapshot(
-            endpoint="/contracts",
-            table_options=table_options,
-        )
-
-    def _read_purchase_orders(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the purchase_orders table."""
-        return self._read_paginated_with_updated_since(
-            endpoint="/purchase_orders",
-            start_offset=start_offset,
-            table_options=table_options,
-            cursor_field="updated_at",
-        )
-
-    def _read_service_catalog_items(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the service_catalog_items table."""
-        return self._read_paginated_snapshot(
-            endpoint="/service_catalog/items",
-            table_options=table_options,
-        )
-
-    def _read_solutions(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the solutions table."""
-        return self._read_paginated_with_updated_since(
-            endpoint="/solutions/articles",
-            start_offset=start_offset,
-            table_options=table_options,
-            cursor_field="updated_at",
-        )
-
-    def _read_roles(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the roles table."""
-        return self._read_paginated_snapshot(
-            endpoint="/roles",
-            table_options=table_options,
-        )
-
-    def _read_sla_policies(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the sla_policies table."""
-        return self._read_paginated_snapshot(
-            endpoint="/sla_policies",
-            table_options=table_options,
-        )
-
-    def _read_business_hours(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the business_hours table."""
-        return self._read_paginated_snapshot(
-            endpoint="/business_hours",
-            table_options=table_options,
-        )
-
-    def _read_announcements(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the announcements table."""
-        return self._read_paginated_snapshot(
-            endpoint="/announcements",
-            table_options=table_options,
-        )
-
-    def _read_ticket_fields(
-        self, start_offset: dict, table_options: dict[str, str]
-    ) -> (Iterator[dict], dict):
-        """Internal implementation for reading the ticket_fields table."""
-        return self._read_paginated_snapshot(
-            endpoint="/ticket_form_fields",
-            table_options=table_options,
-        )
 
     def _read_paginated_with_updated_since(
         self,
@@ -1007,6 +781,7 @@ class LakeflowConnect:
         start_offset: dict,
         table_options: dict[str, str],
         cursor_field: str,
+        response_key: str,
     ) -> (Iterator[dict], dict):
         """
         Helper method to read tables that support incremental loading via updated_since.
@@ -1067,11 +842,8 @@ class LakeflowConnect:
                 # Try common patterns
                 items = None
                 if isinstance(data, dict):
-                    # Common wrapper keys
-                    for key in [endpoint.strip("/").split("/")[-1], "results", "data", "service_items", "ticket_fields"]:
-                        if key in data:
-                            items = data[key]
-                            break
+                    if response_key in data:
+                        items = data[response_key]
                     if items is None:
                         # No wrapper, assume the dict itself is the result
                         items = [data]
@@ -1128,6 +900,7 @@ class LakeflowConnect:
         self,
         endpoint: str,
         table_options: dict[str, str],
+        response_key: str,
     ) -> (Iterator[dict], dict):
         """
         Helper method to read snapshot tables that don't support incremental loading.
@@ -1171,11 +944,8 @@ class LakeflowConnect:
                 # Freshservice wraps results in a key
                 items = None
                 if isinstance(data, dict):
-                    # Common wrapper keys
-                    for key in [endpoint.strip("/").split("/")[-1], "results", "data", "service_items", "ticket_fields"]:
-                        if key in data:
-                            items = data[key]
-                            break
+                    if response_key in data:
+                        items = data[response_key]
                     if items is None:
                         items = [data]
                 elif isinstance(data, list):

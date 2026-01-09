@@ -690,7 +690,6 @@ TABLE_CONFIG = {
         "api_data_request_type": "snapshot",
         "response_key": "ticket_fields",
     },
-    # ==================== NEW TABLES ====================
     "software": {
         "schema": StructType([
             StructField("id", LongType(), False),
@@ -781,7 +780,6 @@ TABLE_CONFIG = {
         "api_data_request_type": "snapshot",
         "response_key": "canned_responses",
     },
-    # ==================== CHILD OBJECTS ====================
     "time_entries": {
         "schema": StructType([
             StructField("id", LongType(), False),

@@ -1,0 +1,24 @@
+{
+    "tickets": {},
+    "agents": {},
+    "requesters": {},
+    "groups": {},
+    "departments": {},
+    "assets": {},
+    "problems": {},
+    "changes": {},
+    "releases": {},
+    "locations": {},
+    "vendors": {},
+    "products": {},
+    "contracts": {},
+    "purchase_orders": {},
+    "service_catalog_items": {},
+    "solutions": {},
+    "roles": {},
+    "sla_policies": {},
+    "business_hours": {},
+    "announcements": {},
+    "ticket_fields": {}
+}
+

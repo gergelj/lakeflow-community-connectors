@@ -86,7 +86,7 @@ TABLE_CONFIG = {
             "ingestion_type": "cdc_with_deletes",
         },
         "endpoint": "/tickets",
-        "ingestion_type": "cdc",
+        "api_data_request_type": "cdc",
         "response_key": "tickets",
         "supports_deletes": True,
         "delete_filter": "deleted", 
@@ -125,7 +125,7 @@ TABLE_CONFIG = {
             "ingestion_type": "cdc",
         },
         "endpoint": "/agents",
-        "ingestion_type": "cdc",
+        "api_data_request_type": "cdc",
         "response_key": "agents",
     },
     "requesters": {
@@ -159,7 +159,7 @@ TABLE_CONFIG = {
             "ingestion_type": "cdc",
         },
         "endpoint": "/requesters",
-        "ingestion_type": "cdc",
+        "api_data_request_type": "cdc",
         "response_key": "requesters",
     },
     "groups": {
@@ -185,7 +185,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/groups",
-        "ingestion_type": "snapshot",
+        "api_data_request_type": "snapshot",
         "response_key": "groups",
     },
     "departments": {
@@ -205,7 +205,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/departments",
-        "ingestion_type": "snapshot",
+        "api_data_request_type": "snapshot",
         "response_key": "departments",
     },
     "assets": {
@@ -237,7 +237,7 @@ TABLE_CONFIG = {
             "ingestion_type": "cdc",
         },
         "endpoint": "/assets",
-        "ingestion_type": "cdc",
+        "api_data_request_type": "cdc",
         "response_key": "assets",
     },
     "problems": {
@@ -270,7 +270,7 @@ TABLE_CONFIG = {
             "ingestion_type": "cdc",
         },
         "endpoint": "/problems",
-        "ingestion_type": "cdc",
+        "api_data_request_type": "cdc",
         "response_key": "problems",
     },
     "changes": {
@@ -306,7 +306,7 @@ TABLE_CONFIG = {
             "ingestion_type": "cdc",
         },
         "endpoint": "/changes",
-        "ingestion_type": "cdc",
+        "api_data_request_type": "cdc",
         "response_key": "changes",
     },
     "releases": {
@@ -340,7 +340,7 @@ TABLE_CONFIG = {
             "ingestion_type": "cdc",
         },
         "endpoint": "/releases",
-        "ingestion_type": "cdc",
+        "api_data_request_type": "cdc",
         "response_key": "releases",
     },
     "locations": {
@@ -358,7 +358,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/locations",
-        "ingestion_type": "snapshot",
+        "api_data_request_type": "snapshot",
         "response_key": "locations",
     },
     "vendors": {
@@ -377,7 +377,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/vendors",
-        "ingestion_type": "snapshot",
+        "api_data_request_type": "snapshot",
         "response_key": "vendors",
     },
     "products": {
@@ -398,7 +398,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/products",
-        "ingestion_type": "snapshot",
+        "api_data_request_type": "snapshot",
         "response_key": "products",
     },
     "contracts": {
@@ -437,7 +437,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/contracts",
-        "ingestion_type": "snapshot",
+        "api_data_request_type": "snapshot",
         "response_key": "contracts",
     },
     "purchase_orders": {
@@ -478,7 +478,7 @@ TABLE_CONFIG = {
             "ingestion_type": "cdc",
         },
         "endpoint": "/purchase_orders",
-        "ingestion_type": "cdc",
+        "api_data_request_type": "cdc",
         "response_key": "purchase_orders",
     },
     "service_catalog_items": {
@@ -521,7 +521,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/service_catalog/items",
-        "ingestion_type": "snapshot",
+        "api_data_request_type": "snapshot",
         "response_key": "service_items",
     },
     "solutions": {
@@ -554,7 +554,7 @@ TABLE_CONFIG = {
             "ingestion_type": "cdc",
         },
         "endpoint": "/solutions/articles?folder_id={parent_id}",
-        "ingestion_type": "child",
+        "api_data_request_type": "child",
         "response_key": "articles",
         "parent_table": "solution_folders",
         "parent_id_field": "folder_id",
@@ -573,7 +573,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/roles",
-        "ingestion_type": "snapshot",
+        "api_data_request_type": "snapshot",
         "response_key": "roles",
     },
     "sla_policies": {
@@ -600,7 +600,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/sla_policies",
-        "ingestion_type": "snapshot",
+        "api_data_request_type": "snapshot",
         "response_key": "sla_policies",
     },
     "business_hours": {
@@ -623,7 +623,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/business_hours",
-        "ingestion_type": "snapshot",
+        "api_data_request_type": "snapshot",
         "response_key": "business_hours",
     },
     "announcements": {
@@ -650,7 +650,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/announcements",
-        "ingestion_type": "snapshot",
+        "api_data_request_type": "snapshot",
         "response_key": "announcements",
     },
     "ticket_fields": {
@@ -687,7 +687,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/ticket_form_fields",
-        "ingestion_type": "snapshot",
+        "api_data_request_type": "snapshot",
         "response_key": "ticket_fields",
     },
     # ==================== NEW TABLES ====================
@@ -713,7 +713,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/applications",
-        "ingestion_type": "snapshot",
+        "api_data_request_type": "snapshot",
         "response_key": "applications",
     },
     "solution_categories": {
@@ -732,7 +732,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/solutions/categories",
-        "ingestion_type": "snapshot",
+        "api_data_request_type": "snapshot",
         "response_key": "categories",
     },
     "solution_folders": {
@@ -757,7 +757,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/solutions/folders",
-        "ingestion_type": "snapshot",
+        "api_data_request_type": "snapshot",
         "response_key": "folders",
     },
     "canned_responses": {
@@ -778,7 +778,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/canned_responses",
-        "ingestion_type": "snapshot",
+        "api_data_request_type": "snapshot",
         "response_key": "canned_responses",
     },
     # ==================== CHILD OBJECTS ====================
@@ -803,7 +803,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",  # Using snapshot since append requires special handling
         },
         "endpoint": "/tickets/{parent_id}/time_entries",
-        "ingestion_type": "child",
+        "api_data_request_type": "child",
         "parent_table": "tickets",
         "parent_id_field": "ticket_id",
         "response_key": "time_entries",
@@ -832,7 +832,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/tickets/{parent_id}/conversations",
-        "ingestion_type": "child",
+        "api_data_request_type": "child",
         "parent_table": "tickets",
         "parent_id_field": "ticket_id",
         "response_key": "conversations",
@@ -858,7 +858,7 @@ TABLE_CONFIG = {
             "ingestion_type": "snapshot",
         },
         "endpoint": "/{parent_type}/{parent_id}/tasks",
-        "ingestion_type": "child_multi_parent",
+        "api_data_request_type": "child_multi_parent",
         "parent_tables": ["tickets", "problems", "changes", "releases"],
         "parent_id_field": "parent_id",
         "parent_type_field": "parent_type",
@@ -934,9 +934,9 @@ class LakeflowConnect:
             raise ValueError(f"Unsupported table: {table_name!r}")
 
         table_config = TABLE_CONFIG[table_name]
-        ingestion_type = table_config["ingestion_type"]
+        api_data_request_type = table_config["api_data_request_type"]
 
-        if ingestion_type == "cdc":
+        if api_data_request_type == "cdc":
             metadata = self.read_table_metadata(table_name, table_options)
             return self._read_paginated_with_updated_since(
                 endpoint=table_config["endpoint"],
@@ -945,24 +945,24 @@ class LakeflowConnect:
                 cursor_field=metadata["cursor_field"],
                 response_key=table_config["response_key"],
             )
-        elif ingestion_type == "snapshot":
+        elif api_data_request_type == "snapshot":
             return self._read_paginated_snapshot(
                 endpoint=table_config["endpoint"],
                 table_options=table_options,
                 response_key=table_config["response_key"],
             )
-        elif ingestion_type == "child":
+        elif api_data_request_type == "child":
             return self._read_child_objects(
                 table_name=table_name,
                 table_options=table_options,
             )
-        elif ingestion_type == "child_multi_parent":
+        elif api_data_request_type == "child_multi_parent":
             return self._read_child_multi_parent_objects(
                 table_name=table_name,
                 table_options=table_options,
             )
         else:
-            raise ValueError(f"Unsupported ingestion type: {ingestion_type!r}")
+            raise ValueError(f"Unsupported api_data_request_type: {api_data_request_type!r}")
 
     def read_table_deletes(
         self, table_name: str, start_offset: dict, table_options: dict[str, str]

@@ -66,13 +66,13 @@ class LakeflowConnect:
             "products",
             "contracts",
             "purchase_orders",
-            # "service_catalog_items",
+            "service_catalog_items",
             #"solutions",
             "roles",
             "sla_policies",
             "business_hours",
             "announcements",
-            # "ticket_fields",
+            "ticket_fields",
         ]
 
     def _get_attachment_struct(self) -> StructType:
@@ -117,13 +117,13 @@ class LakeflowConnect:
             "products": self._get_products_schema,
             "contracts": self._get_contracts_schema,
             "purchase_orders": self._get_purchase_orders_schema,
-            # "service_catalog_items": self._get_service_catalog_items_schema,
-            #"solutions": self._get_solutions_schema,
+            "service_catalog_items": self._get_service_catalog_items_schema,
+            "solutions": self._get_solutions_schema,
             "roles": self._get_roles_schema,
             "sla_policies": self._get_sla_policies_schema,
             "business_hours": self._get_business_hours_schema,
             "announcements": self._get_announcements_schema,
-            # "ticket_fields": self._get_ticket_fields_schema,
+            "ticket_fields": self._get_ticket_fields_schema,
         }
 
         if table_name not in schema_map:
@@ -725,15 +725,15 @@ class LakeflowConnect:
                 "cursor_field": "updated_at",
                 "ingestion_type": "cdc",
             },
-            # "service_catalog_items": {
-            #     "primary_keys": ["id"],
-            #     "ingestion_type": "snapshot",
-            # },
-            # "solutions": {
-            #     "primary_keys": ["id"],
-            #     "cursor_field": "updated_at",
-            #     "ingestion_type": "cdc",
-            # },
+            "service_catalog_items": {
+                "primary_keys": ["id"],
+                "ingestion_type": "snapshot",
+            },
+            "solutions": {
+                "primary_keys": ["id"],
+                "cursor_field": "updated_at",
+                "ingestion_type": "cdc",
+            },
             "roles": {
                 "primary_keys": ["id"],
                 "ingestion_type": "snapshot",
@@ -750,10 +750,10 @@ class LakeflowConnect:
                 "primary_keys": ["id"],
                 "ingestion_type": "snapshot",
             },
-            # "ticket_fields": {
-            #     "primary_keys": ["id"],
-            #     "ingestion_type": "snapshot",
-            # },
+            "ticket_fields": {
+                "primary_keys": ["id"],
+                "ingestion_type": "snapshot",
+            },
         }
 
         if table_name not in metadata_map:
@@ -781,13 +781,13 @@ class LakeflowConnect:
             "products": self._read_products,
             "contracts": self._read_contracts,
             "purchase_orders": self._read_purchase_orders,
-            # "service_catalog_items": self._read_service_catalog_items,
-            #"solutions": self._read_solutions,
+            "service_catalog_items": self._read_service_catalog_items,
+            "solutions": self._read_solutions,
             "roles": self._read_roles,
             "sla_policies": self._read_sla_policies,
             "business_hours": self._read_business_hours,
             "announcements": self._read_announcements,
-            #"ticket_fields": self._read_ticket_fields,
+            "ticket_fields": self._read_ticket_fields,
         }
 
         if table_name not in reader_map:
@@ -1068,7 +1068,7 @@ class LakeflowConnect:
                 items = None
                 if isinstance(data, dict):
                     # Common wrapper keys
-                    for key in [endpoint.strip("/").split("/")[-1], "results", "data"]:
+                    for key in [endpoint.strip("/").split("/")[-1], "results", "data", "service_items", "ticket_fields"]:
                         if key in data:
                             items = data[key]
                             break
@@ -1172,7 +1172,7 @@ class LakeflowConnect:
                 items = None
                 if isinstance(data, dict):
                     # Common wrapper keys
-                    for key in [endpoint.strip("/").split("/")[-1], "results", "data"]:
+                    for key in [endpoint.strip("/").split("/")[-1], "results", "data", "service_items", "ticket_fields"]:
                         if key in data:
                             items = data[key]
                             break

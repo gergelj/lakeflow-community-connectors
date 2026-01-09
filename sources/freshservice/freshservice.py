@@ -83,11 +83,13 @@ TABLE_CONFIG = {
         "metadata": {
             "primary_keys": ["id"],
             "cursor_field": "updated_at",
-            "ingestion_type": "cdc",
+            "ingestion_type": "cdc_with_deletes",
         },
         "endpoint": "/tickets",
         "ingestion_type": "cdc",
         "response_key": "tickets",
+        "supports_deletes": True,
+        "delete_filter": "deleted", 
     },
     "agents": {
         "schema": StructType([
@@ -961,6 +963,150 @@ class LakeflowConnect:
             )
         else:
             raise ValueError(f"Unsupported ingestion type: {ingestion_type!r}")
+
+    def read_table_deletes(
+        self, table_name: str, start_offset: dict, table_options: dict[str, str]
+    ) -> (Iterator[dict], dict):
+        """
+        Read deleted (soft-deleted) records from Freshservice API.
+
+        Freshservice uses soft deletes for tickets (deleted=true flag).
+        This method fetches deleted/trashed records using the filter=deleted parameter.
+
+        Args:
+            table_name: Name of the table to read deleted records from
+            start_offset: Dictionary containing cursor information for incremental reads
+                         (uses 'cursor' key storing updated_at values)
+            table_options: Additional options for reading
+
+        Returns:
+            Tuple of (deleted_records, new_offset) with at minimum primary key and cursor fields
+        """
+        if table_name not in TABLE_CONFIG:
+            raise ValueError(f"Unsupported table: {table_name!r}")
+
+        table_config = TABLE_CONFIG[table_name]
+
+        # Check if this table supports delete tracking
+        if not table_config.get("supports_deletes", False):
+            raise ValueError(
+                f"Table {table_name!r} does not support delete synchronization. "
+                f"Only tables with 'supports_deletes: True' can use read_table_deletes."
+            )
+
+        metadata = self.read_table_metadata(table_name, table_options)
+        cursor_field = metadata.get("cursor_field", "updated_at")
+        delete_filter = table_config.get("delete_filter", "deleted")
+        endpoint = table_config["endpoint"]
+        response_key = table_config["response_key"]
+
+        try:
+            per_page = int(table_options.get("per_page", 100))
+        except (TypeError, ValueError):
+            per_page = 100
+        per_page = max(1, min(per_page, 100))
+
+        try:
+            max_pages_per_batch = int(table_options.get("max_pages_per_batch", 100))
+        except (TypeError, ValueError):
+            max_pages_per_batch = 100
+
+        try:
+            lookback_seconds = int(table_options.get("lookback_seconds", 300))
+        except (TypeError, ValueError):
+            lookback_seconds = 300
+
+        # Determine the starting cursor
+        cursor = None
+        if start_offset and isinstance(start_offset, dict):
+            cursor = start_offset.get("cursor")
+        if not cursor:
+            cursor = table_options.get("start_date")
+
+        url = f"{self.base_url}{endpoint}"
+        params = {
+            "per_page": per_page,
+            "page": 1,
+            "filter": delete_filter,  # Get soft-deleted records
+        }
+
+        if cursor:
+            params["updated_since"] = cursor
+
+        records: list[dict[str, Any]] = []
+        max_updated_at: str | None = None
+        pages_fetched = 0
+
+        while pages_fetched < max_pages_per_batch:
+            try:
+                response = self._session.get(url, params=params, timeout=30)
+
+                if response.status_code == 429:
+                    # Rate limit hit, wait and retry
+                    retry_after = int(response.headers.get("Retry-After", 60))
+                    import time
+                    time.sleep(retry_after)
+                    continue
+
+                if response.status_code != 200:
+                    raise RuntimeError(
+                        f"Freshservice API error for {endpoint} (deletes): "
+                        f"{response.status_code} {response.text}"
+                    )
+
+                data = response.json()
+
+                items = None
+                if isinstance(data, dict):
+                    if response_key in data:
+                        items = data[response_key]
+                    if items is None:
+                        items = [data] if data else []
+                elif isinstance(data, list):
+                    items = data
+
+                if not items:
+                    break
+
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+
+                    records.append(dict(item))
+
+                    # Track max cursor value
+                    updated_at = item.get(cursor_field)
+                    if isinstance(updated_at, str):
+                        if max_updated_at is None or updated_at > max_updated_at:
+                            max_updated_at = updated_at
+
+                # Check if there are more pages
+                if len(items) < per_page:
+                    break
+
+                params["page"] += 1
+                pages_fetched += 1
+
+            except requests.exceptions.RequestException as e:
+                raise RuntimeError(f"Network error while reading deleted {endpoint}: {e}")
+
+        # Compute next cursor with lookback window
+        next_cursor = cursor
+        if max_updated_at:
+            try:
+                dt = datetime.fromisoformat(max_updated_at.replace("Z", "+00:00"))
+                dt_with_lookback = dt - timedelta(seconds=lookback_seconds)
+                next_cursor = dt_with_lookback.strftime("%Y-%m-%dT%H:%M:%SZ")
+            except Exception:
+                next_cursor = max_updated_at
+
+        # Return same offset if no new records
+        if not records and start_offset:
+            next_offset = start_offset
+        else:
+            next_offset = {"cursor": next_cursor} if next_cursor else {}
+
+        return iter(records), next_offset
 
 
     def _read_paginated_with_updated_since(

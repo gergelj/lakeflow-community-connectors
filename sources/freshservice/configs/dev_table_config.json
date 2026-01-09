@@ -14,11 +14,16 @@
     "contracts": {},
     "purchase_orders": {},
     "service_catalog_items": {},
-    "solutions": {},
     "roles": {},
     "sla_policies": {},
     "business_hours": {},
     "announcements": {},
-    "ticket_fields": {}
+    "ticket_fields": {},
+    "software": {},
+    "solution_categories": {},
+    "solution_folders": {},
+    "canned_responses": {},
+    "time_entries": {},
+    "conversations": {},
+    "tasks": {}
 }
-

@@ -522,39 +522,41 @@ TABLE_CONFIG = {
         "ingestion_type": "snapshot",
         "response_key": "service_items",
     },
-    # "solutions": {
-    #     "schema": StructType([
-    #         StructField("id", LongType(), False),
-    #         StructField("title", StringType(), True),
-    #         StructField("description", StringType(), True),
-    #         StructField("description_text", StringType(), True),
-    #         StructField("status", LongType(), True),
-    #         StructField("approval_status", LongType(), True),
-    #         StructField("folder_id", LongType(), True),
-    #         StructField("category_id", LongType(), True),
-    #         StructField("agent_id", LongType(), True),
-    #         StructField("thumbs_up", LongType(), True),
-    #         StructField("thumbs_down", LongType(), True),
-    #         StructField("hits", LongType(), True),
-    #         StructField("tags", ArrayType(StringType(), True), True),
-    #         StructField("keywords", ArrayType(StringType(), True), True),
-    #         StructField("seo_data", StructType([
-    #             StructField("meta_title", StringType(), True),
-    #             StructField("meta_description", StringType(), True),
-    #         ]), True),
-    #         StructField("attachments", ArrayType(ATTACHMENT_STRUCT, True), True),
-    #         StructField("created_at", StringType(), True),
-    #         StructField("updated_at", StringType(), True),
-    #     ]),
-    #     "metadata": {
-    #         "primary_keys": ["id"],
-    #         "cursor_field": "updated_at",
-    #         "ingestion_type": "cdc",
-    #     },
-    #     "endpoint": "/solutions/articles",
-    #     "ingestion_type": "cdc",
-    #     "response_key": "articles",
-    # },
+    "solutions": {
+        "schema": StructType([
+            StructField("id", LongType(), False),
+            StructField("title", StringType(), True),
+            StructField("description", StringType(), True),
+            StructField("description_text", StringType(), True),
+            StructField("status", LongType(), True),
+            StructField("approval_status", LongType(), True),
+            StructField("folder_id", LongType(), True),
+            StructField("category_id", LongType(), True),
+            StructField("agent_id", LongType(), True),
+            StructField("thumbs_up", LongType(), True),
+            StructField("thumbs_down", LongType(), True),
+            StructField("hits", LongType(), True),
+            StructField("tags", ArrayType(StringType(), True), True),
+            StructField("keywords", ArrayType(StringType(), True), True),
+            StructField("seo_data", StructType([
+                StructField("meta_title", StringType(), True),
+                StructField("meta_description", StringType(), True),
+            ]), True),
+            StructField("attachments", ArrayType(ATTACHMENT_STRUCT, True), True),
+            StructField("created_at", StringType(), True),
+            StructField("updated_at", StringType(), True),
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "cursor_field": "updated_at",
+            "ingestion_type": "cdc",
+        },
+        "endpoint": "/solutions/articles?folder_id={parent_id}",
+        "ingestion_type": "child",
+        "response_key": "articles",
+        "parent_table": "solution_folders",
+        "parent_id_field": "folder_id",
+    },
     "roles": {
         "schema": StructType([
             StructField("id", LongType(), False),
@@ -686,6 +688,180 @@ TABLE_CONFIG = {
         "ingestion_type": "snapshot",
         "response_key": "ticket_fields",
     },
+    # ==================== NEW TABLES ====================
+    "software": {
+        "schema": StructType([
+            StructField("id", LongType(), False),
+            StructField("name", StringType(), True),
+            StructField("description", StringType(), True),
+            StructField("application_type", StringType(), True),
+            StructField("status", StringType(), True),
+            StructField("publisher", StringType(), True),
+            StructField("managed_by_id", LongType(), True),
+            StructField("notes", StringType(), True),
+            StructField("category", StringType(), True),
+            StructField("source", StringType(), True),
+            StructField("user_count", LongType(), True),
+            StructField("installation_count", LongType(), True),
+            StructField("created_at", StringType(), True),
+            StructField("updated_at", StringType(), True),
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/applications",
+        "ingestion_type": "snapshot",
+        "response_key": "applications",
+    },
+    "solution_categories": {
+        "schema": StructType([
+            StructField("id", LongType(), False),
+            StructField("name", StringType(), True),
+            StructField("description", StringType(), True),
+            StructField("position", LongType(), True),
+            StructField("default_category", BooleanType(), True),
+            StructField("visible_in_portals", ArrayType(LongType(), True), True),
+            StructField("created_at", StringType(), True),
+            StructField("updated_at", StringType(), True),
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/solutions/categories",
+        "ingestion_type": "snapshot",
+        "response_key": "categories",
+    },
+    "solution_folders": {
+        "schema": StructType([
+            StructField("id", LongType(), False),
+            StructField("name", StringType(), True),
+            StructField("description", StringType(), True),
+            StructField("category_id", LongType(), True),
+            StructField("position", LongType(), True),
+            StructField("default_folder", BooleanType(), True),
+            StructField("visibility", LongType(), True),
+            StructField("department_ids", ArrayType(LongType(), True), True),
+            StructField("group_ids", ArrayType(LongType(), True), True),
+            StructField("requester_group_ids", ArrayType(LongType(), True), True),
+            StructField("manage_by_group_ids", ArrayType(LongType(), True), True),
+            StructField("approval_settings", MapType(StringType(), StringType(), True), True),
+            StructField("created_at", StringType(), True),
+            StructField("updated_at", StringType(), True),
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/solutions/folders",
+        "ingestion_type": "snapshot",
+        "response_key": "folders",
+    },
+    "canned_responses": {
+        "schema": StructType([
+            StructField("id", LongType(), False),
+            StructField("title", StringType(), True),
+            StructField("content", StringType(), True),
+            StructField("content_html", StringType(), True),
+            StructField("folder_id", LongType(), True),
+            StructField("visibility", LongType(), True),
+            StructField("group_ids", ArrayType(LongType(), True), True),
+            StructField("attachments", ArrayType(ATTACHMENT_STRUCT, True), True),
+            StructField("created_at", StringType(), True),
+            StructField("updated_at", StringType(), True),
+        ]),
+        "metadata": {
+            "primary_keys": ["id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/canned_responses",
+        "ingestion_type": "snapshot",
+        "response_key": "canned_responses",
+    },
+    # ==================== CHILD OBJECTS ====================
+    "time_entries": {
+        "schema": StructType([
+            StructField("id", LongType(), False),
+            StructField("ticket_id", LongType(), False),  # Composite primary key with id
+            StructField("start_time", StringType(), True),
+            StructField("timer_running", BooleanType(), True),
+            StructField("billable", BooleanType(), True),
+            StructField("time_spent", StringType(), True),
+            StructField("executed_at", StringType(), True),
+            StructField("task_id", LongType(), True),
+            StructField("note", StringType(), True),
+            StructField("agent_id", LongType(), True),
+            StructField("custom_fields", MapType(StringType(), StringType(), True), True),
+            StructField("created_at", StringType(), True),
+            StructField("updated_at", StringType(), True),
+        ]),
+        "metadata": {
+            "primary_keys": ["id", "ticket_id"],
+            "ingestion_type": "snapshot",  # Using snapshot since append requires special handling
+        },
+        "endpoint": "/tickets/{parent_id}/time_entries",
+        "ingestion_type": "child",
+        "parent_table": "tickets",
+        "parent_id_field": "ticket_id",
+        "response_key": "time_entries",
+    },
+    "conversations": {
+        "schema": StructType([
+            StructField("id", LongType(), False),
+            StructField("ticket_id", LongType(), False),  # Composite primary key with id
+            StructField("user_id", LongType(), True),
+            StructField("body", StringType(), True),
+            StructField("body_text", StringType(), True),
+            StructField("incoming", BooleanType(), True),
+            StructField("private", BooleanType(), True),
+            StructField("source", LongType(), True),
+            StructField("support_email", StringType(), True),
+            StructField("to_emails", ArrayType(StringType(), True), True),
+            StructField("from_email", StringType(), True),
+            StructField("cc_emails", ArrayType(StringType(), True), True),
+            StructField("bcc_emails", ArrayType(StringType(), True), True),
+            StructField("attachments", ArrayType(ATTACHMENT_STRUCT, True), True),
+            StructField("created_at", StringType(), True),
+            StructField("updated_at", StringType(), True),
+        ]),
+        "metadata": {
+            "primary_keys": ["id", "ticket_id"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/tickets/{parent_id}/conversations",
+        "ingestion_type": "child",
+        "parent_table": "tickets",
+        "parent_id_field": "ticket_id",
+        "response_key": "conversations",
+    },
+    "tasks": {
+        "schema": StructType([
+            StructField("id", LongType(), False),
+            StructField("parent_id", LongType(), False),  # Composite primary key
+            StructField("parent_type", StringType(), False),  # ticket, problem, change, or release
+            StructField("agent_id", LongType(), True),
+            StructField("group_id", LongType(), True),
+            StructField("status", LongType(), True),
+            StructField("title", StringType(), True),
+            StructField("description", StringType(), True),
+            StructField("notify_before", LongType(), True),
+            StructField("due_date", StringType(), True),
+            StructField("closed_at", StringType(), True),
+            StructField("created_at", StringType(), True),
+            StructField("updated_at", StringType(), True),
+        ]),
+        "metadata": {
+            "primary_keys": ["id", "parent_id", "parent_type"],
+            "ingestion_type": "snapshot",
+        },
+        "endpoint": "/{parent_type}/{parent_id}/tasks",
+        "ingestion_type": "child_multi_parent",
+        "parent_tables": ["tickets", "problems", "changes", "releases"],
+        "parent_id_field": "parent_id",
+        "parent_type_field": "parent_type",
+        "response_key": "tasks",
+    },
 }
 
 class LakeflowConnect:
@@ -755,24 +931,36 @@ class LakeflowConnect:
         if table_name not in TABLE_CONFIG:
             raise ValueError(f"Unsupported table: {table_name!r}")
 
-        metadata = self.read_table_metadata(table_name, table_options)
+        table_config = TABLE_CONFIG[table_name]
+        ingestion_type = table_config["ingestion_type"]
 
-        if metadata["ingestion_type"] == "cdc":
+        if ingestion_type == "cdc":
+            metadata = self.read_table_metadata(table_name, table_options)
             return self._read_paginated_with_updated_since(
-                endpoint=TABLE_CONFIG[table_name]["endpoint"],
+                endpoint=table_config["endpoint"],
                 start_offset=start_offset,
                 table_options=table_options,
                 cursor_field=metadata["cursor_field"],
-                response_key=TABLE_CONFIG[table_name]["response_key"],
+                response_key=table_config["response_key"],
             )
-        elif metadata["ingestion_type"] == "snapshot":
+        elif ingestion_type == "snapshot":
             return self._read_paginated_snapshot(
-                endpoint=TABLE_CONFIG[table_name]["endpoint"],
+                endpoint=table_config["endpoint"],
                 table_options=table_options,
-                response_key=TABLE_CONFIG[table_name]["response_key"],
+                response_key=table_config["response_key"],
+            )
+        elif ingestion_type == "child":
+            return self._read_child_objects(
+                table_name=table_name,
+                table_options=table_options,
+            )
+        elif ingestion_type == "child_multi_parent":
+            return self._read_child_multi_parent_objects(
+                table_name=table_name,
+                table_options=table_options,
             )
         else:
-            raise ValueError(f"Unsupported ingestion type: {metadata['ingestion_type']!r}")
+            raise ValueError(f"Unsupported ingestion type: {ingestion_type!r}")
 
 
     def _read_paginated_with_updated_since(
@@ -971,4 +1159,257 @@ class LakeflowConnect:
 
         # Snapshot tables return empty offset
         return iter(records), {}
+
+    def _read_child_objects(
+        self,
+        table_name: str,
+        table_options: dict[str, str],
+    ) -> (Iterator[dict], dict):
+        """
+        Helper method to read child objects by iterating over parent records.
+        For example: time_entries and conversations are children of tickets.
+        """
+        table_config = TABLE_CONFIG[table_name]
+        parent_table = table_config["parent_table"]
+        parent_id_field = table_config["parent_id_field"]
+        endpoint_template = table_config["endpoint"]
+        response_key = table_config["response_key"]
+
+        try:
+            per_page = int(table_options.get("per_page", 100))
+        except (TypeError, ValueError):
+            per_page = 100
+        per_page = max(1, min(per_page, 100))
+
+        try:
+            max_parents = int(table_options.get("max_parents", 1000))
+        except (TypeError, ValueError):
+            max_parents = 1000
+
+        # First, get all parent IDs
+        parent_ids = self._get_parent_ids(parent_table, table_options, max_parents)
+
+        records: list[dict[str, Any]] = []
+
+        for parent_id in parent_ids:
+            endpoint = endpoint_template.replace("{parent_id}", str(parent_id))
+            url = f"{self.base_url}{endpoint}"
+            params = {"per_page": per_page, "page": 1}
+
+            while True:
+                try:
+                    response = self._session.get(url, params=params, timeout=30)
+
+                    if response.status_code == 429:
+                        retry_after = int(response.headers.get("Retry-After", 60))
+                        import time
+                        time.sleep(retry_after)
+                        continue
+
+                    if response.status_code == 404:
+                        # Parent may have been deleted or has no child records
+                        break
+
+                    if response.status_code != 200:
+                        raise RuntimeError(
+                            f"Freshservice API error for {endpoint}: "
+                            f"{response.status_code} {response.text}"
+                        )
+
+                    data = response.json()
+
+                    items = None
+                    if isinstance(data, dict):
+                        if response_key in data:
+                            items = data[response_key]
+                        if items is None:
+                            items = [data] if data else []
+                    elif isinstance(data, list):
+                        items = data
+
+                    if not items:
+                        break
+
+                    for item in items:
+                        if not isinstance(item, dict):
+                            continue
+                        # Add parent ID to the record
+                        item[parent_id_field] = parent_id
+                        records.append(dict(item))
+
+                    if len(items) < per_page:
+                        break
+
+                    params["page"] += 1
+
+                except requests.exceptions.RequestException as e:
+                    raise RuntimeError(f"Network error while reading {endpoint}: {e}")
+
+        return iter(records), {}
+
+    def _read_child_multi_parent_objects(
+        self,
+        table_name: str,
+        table_options: dict[str, str],
+    ) -> (Iterator[dict], dict):
+        """
+        Helper method to read child objects that can belong to multiple parent types.
+        For example: tasks can belong to tickets, problems, changes, or releases.
+        """
+        table_config = TABLE_CONFIG[table_name]
+        parent_tables = table_config["parent_tables"]
+        parent_id_field = table_config["parent_id_field"]
+        parent_type_field = table_config["parent_type_field"]
+        endpoint_template = table_config["endpoint"]
+        response_key = table_config["response_key"]
+
+        try:
+            per_page = int(table_options.get("per_page", 100))
+        except (TypeError, ValueError):
+            per_page = 100
+        per_page = max(1, min(per_page, 100))
+
+        try:
+            max_parents_per_type = int(table_options.get("max_parents_per_type", 500))
+        except (TypeError, ValueError):
+            max_parents_per_type = 500
+
+        records: list[dict[str, Any]] = []
+
+        for parent_table in parent_tables:
+            # Get parent IDs for this type
+            parent_ids = self._get_parent_ids(parent_table, table_options, max_parents_per_type)
+
+            for parent_id in parent_ids:
+                # Build endpoint: /{parent_type}/{parent_id}/tasks
+                endpoint = endpoint_template.replace("{parent_type}", parent_table).replace("{parent_id}", str(parent_id))
+                url = f"{self.base_url}{endpoint}"
+                params = {"per_page": per_page, "page": 1}
+
+                while True:
+                    try:
+                        response = self._session.get(url, params=params, timeout=30)
+
+                        if response.status_code == 429:
+                            retry_after = int(response.headers.get("Retry-After", 60))
+                            import time
+                            time.sleep(retry_after)
+                            continue
+
+                        if response.status_code == 404:
+                            # Parent may have been deleted or has no child records
+                            break
+
+                        if response.status_code != 200:
+                            raise RuntimeError(
+                                f"Freshservice API error for {endpoint}: "
+                                f"{response.status_code} {response.text}"
+                            )
+
+                        data = response.json()
+
+                        items = None
+                        if isinstance(data, dict):
+                            if response_key in data:
+                                items = data[response_key]
+                            if items is None:
+                                items = [data] if data else []
+                        elif isinstance(data, list):
+                            items = data
+
+                        if not items:
+                            break
+
+                        for item in items:
+                            if not isinstance(item, dict):
+                                continue
+                            # Add parent ID and type to the record
+                            item[parent_id_field] = parent_id
+                            # Convert parent table name to singular form for parent_type
+                            parent_type = parent_table.rstrip("s")  # tickets -> ticket
+                            item[parent_type_field] = parent_type
+                            records.append(dict(item))
+
+                        if len(items) < per_page:
+                            break
+
+                        params["page"] += 1
+
+                    except requests.exceptions.RequestException as e:
+                        raise RuntimeError(f"Network error while reading {endpoint}: {e}")
+
+        return iter(records), {}
+
+    def _get_parent_ids(
+        self,
+        parent_table: str,
+        table_options: dict[str, str],
+        max_parents: int,
+    ) -> list[int]:
+        """
+        Fetch parent IDs for child object queries.
+        """
+        if parent_table not in TABLE_CONFIG:
+            raise ValueError(f"Unsupported parent table: {parent_table!r}")
+
+        parent_config = TABLE_CONFIG[parent_table]
+        endpoint = parent_config["endpoint"]
+        response_key = parent_config["response_key"]
+
+        try:
+            per_page = int(table_options.get("per_page", 100))
+        except (TypeError, ValueError):
+            per_page = 100
+        per_page = max(1, min(per_page, 100))
+
+        url = f"{self.base_url}{endpoint}"
+        params = {"per_page": per_page, "page": 1}
+
+        parent_ids: list[int] = []
+
+        while len(parent_ids) < max_parents:
+            try:
+                response = self._session.get(url, params=params, timeout=30)
+
+                if response.status_code == 429:
+                    retry_after = int(response.headers.get("Retry-After", 60))
+                    import time
+                    time.sleep(retry_after)
+                    continue
+
+                if response.status_code != 200:
+                    raise RuntimeError(
+                        f"Freshservice API error for {endpoint}: "
+                        f"{response.status_code} {response.text}"
+                    )
+
+                data = response.json()
+
+                items = None
+                if isinstance(data, dict):
+                    if response_key in data:
+                        items = data[response_key]
+                    if items is None:
+                        items = [data] if data else []
+                elif isinstance(data, list):
+                    items = data
+
+                if not items:
+                    break
+
+                for item in items:
+                    if isinstance(item, dict) and "id" in item:
+                        parent_ids.append(item["id"])
+                        if len(parent_ids) >= max_parents:
+                            break
+
+                if len(items) < per_page:
+                    break
+
+                params["page"] += 1
+
+            except requests.exceptions.RequestException as e:
+                raise RuntimeError(f"Network error while reading {endpoint}: {e}")
+
+        return parent_ids
 

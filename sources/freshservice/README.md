@@ -18,7 +18,7 @@ To configure the connector, provide the following parameters in your connector o
 |-----------|------|----------|-------------|---------|
 | `api_key` | string | Yes | API key for Freshservice REST API authentication. Uses Basic Authentication with the key as username and 'X' as password. | `your_api_key_here` |
 | `domain` | string | Yes | Your Freshservice subdomain. Do not include the full URL or '.freshservice.com' suffix. | `acme` |
-| `externalOptionsAllowList` | string | Yes | Comma-separated list of table-specific options that can be passed through. | `per_page,max_pages_per_batch,lookback_seconds,start_date,max_parents,max_parents_per_type` |
+| `externalOptionsAllowList` | string | Yes | Comma-separated list of table-specific options that can be passed through. | `per_page,max_pages_per_batch,lookback_seconds,start_date,max_parents,max_parents_per_type,tableConfigs,isDeleteFlow` |
 
 ### External Options Allowlist
 
@@ -32,6 +32,8 @@ The following table-specific options are supported and must be included in `exte
 | `start_date` | string | - | ISO 8601 datetime for initial cursor (e.g., `2025-01-01T00:00:00Z`) |
 | `max_parents` | integer | 1000 | Maximum parent records to iterate for child objects (time_entries, conversations, solutions) |
 | `max_parents_per_type` | integer | 500 | Maximum parent records per type for multi-parent child objects (tasks) |
+| `tableConfigs` | NA | NA | Parameter required by Unity Catalog Connection |
+| `isDeleteFlow` | NA | NA | Parameter required for handling deletes |
 
 ### Obtaining Your API Key
 
@@ -49,7 +51,7 @@ A Unity Catalog connection for this connector can be created in two ways via the
 
 1. Follow the Lakeflow Community Connector UI flow from the "Add Data" page
 2. Select any existing Lakeflow Community Connector connection for Freshservice or create a new one
-3. Set `externalOptionsAllowList` to: `per_page,max_pages_per_batch,lookback_seconds,start_date,max_parents,max_parents_per_type`
+3. Set `externalOptionsAllowList` to: `per_page,max_pages_per_batch,lookback_seconds,start_date,max_parents,max_parents_per_type,tableConfigs,isDeleteFlow`
 
 The connection can also be created using the standard Unity Catalog API.
 

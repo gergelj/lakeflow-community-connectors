@@ -52,7 +52,7 @@ The Freshservice API provides access to various objects for IT Service Managemen
 
 | Object Name | Description | Primary Endpoint | Ingestion Type |
 |------------|-------------|------------------|----------------|
-| `tickets` | Support tickets (incidents and service requests) | `GET /api/v2/tickets` | `cdc` |
+| `tickets` | Support tickets (incidents and service requests) | `GET /api/v2/tickets` | `cdc_with_deletes` |
 | `problems` | Problem records linked to incidents | `GET /api/v2/problems` | `cdc` |
 | `changes` | Change management requests | `GET /api/v2/changes` | `cdc` |
 | `releases` | Release management records | `GET /api/v2/releases` | `cdc` |
@@ -83,7 +83,7 @@ The Freshservice API provides access to various objects for IT Service Managemen
 | Object Name | Description | Primary Endpoint | Ingestion Type |
 |------------|-------------|------------------|----------------|
 | `service_catalog_items` | Service items offered to users | `GET /api/v2/service_catalog/items` | `snapshot` |
-| `solutions` | Knowledge base articles | `GET /api/v2/solutions/articles` | `cdc` |
+| `solutions` | Knowledge base articles (child of solution_folders) | `GET /api/v2/solutions/articles?folder_id={id}` | `snapshot` (child) |
 | `solution_categories` | Knowledge base categories | `GET /api/v2/solutions/categories` | `snapshot` |
 | `solution_folders` | Knowledge base folders | `GET /api/v2/solutions/folders` | `snapshot` |
 
@@ -92,19 +92,30 @@ The Freshservice API provides access to various objects for IT Service Managemen
 | Object Name | Description | Primary Endpoint | Ingestion Type |
 |------------|-------------|------------------|----------------|
 | `locations` | Physical office locations | `GET /api/v2/locations` | `snapshot` |
-| `time_entries` | Time logs for tickets | `GET /api/v2/tickets/{id}/time_entries` | `append` |
-| `conversations` | Ticket conversations (notes/replies) | `GET /api/v2/tickets/{id}/conversations` | `append` |
-| `tasks` | Tasks associated with tickets/changes/problems | `GET /api/v2/tickets/{id}/tasks` | `cdc` |
+| `time_entries` | Time logs for tickets (child of tickets) | `GET /api/v2/tickets/{id}/time_entries` | `snapshot` (child) |
+| `conversations` | Ticket conversations (child of tickets) | `GET /api/v2/tickets/{id}/conversations` | `snapshot` (child) |
+| `tasks` | Tasks (child of tickets/changes/problems/releases) | `GET /api/v2/{parent_type}/{id}/tasks` | `snapshot` (child_multi_parent) |
 | `announcements` | Broadcast messages to users | `GET /api/v2/announcements` | `snapshot` |
 
 ### Configuration Objects
 
 | Object Name | Description | Primary Endpoint | Ingestion Type |
 |------------|-------------|------------------|----------------|
-| `ticket_fields` | Ticket field definitions | `GET /api/v2/ticket_fields` | `snapshot` |
+| `ticket_fields` | Ticket field definitions | `GET /api/v2/ticket_form_fields` | `snapshot` |
 | `sla_policies` | SLA policy definitions | `GET /api/v2/sla_policies` | `snapshot` |
 | `business_hours` | Business hours configuration | `GET /api/v2/business_hours` | `snapshot` |
 | `canned_responses` | Pre-defined response templates | `GET /api/v2/canned_responses` | `snapshot` |
+
+### Parent-Child Relationships
+
+Some objects are accessed as children of parent objects. The connector handles these relationships automatically:
+
+| Child Object | Parent Object(s) | Relationship |
+|-------------|------------------|--------------|
+| `time_entries` | `tickets` | One-to-many (ticket_id) |
+| `conversations` | `tickets` | One-to-many (ticket_id) |
+| `tasks` | `tickets`, `problems`, `changes`, `releases` | Multi-parent (parent_id, parent_type) |
+| `solutions` | `solution_folders` | One-to-many (folder_id) |
 
 
 ## **Object Schema**
@@ -913,6 +924,96 @@ The Freshservice API provides access to various objects for IT Service Managemen
 | `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
 | `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
 
+---
+
+### `software` object
+
+**Source endpoint**: `GET /api/v2/applications`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the software. |
+| `name` | string | Name of the software. |
+| `description` | string or null | Description of the software. |
+| `application_type` | string or null | Type of application. |
+| `status` | string or null | Status of the software. |
+| `publisher` | string or null | Software publisher. |
+| `managed_by_id` | integer (64-bit) or null | ID of the manager. |
+| `notes` | string or null | Notes about the software. |
+| `category` | string or null | Software category. |
+| `source` | string or null | Source of the software record. |
+| `user_count` | integer (64-bit) or null | Number of users. |
+| `installation_count` | integer (64-bit) or null | Number of installations. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `solution_categories` object
+
+**Source endpoint**: `GET /api/v2/solutions/categories`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the category. |
+| `name` | string | Name of the category. |
+| `description` | string or null | Description of the category. |
+| `position` | integer (64-bit) or null | Display position. |
+| `default_category` | boolean | Indicates if this is the default category. |
+| `visible_in_portals` | array\<integer\> | Portal IDs where visible. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `solution_folders` object
+
+**Source endpoint**: `GET /api/v2/solutions/folders`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the folder. |
+| `name` | string | Name of the folder. |
+| `description` | string or null | Description of the folder. |
+| `category_id` | integer (64-bit) | ID of the parent category. |
+| `position` | integer (64-bit) or null | Display position. |
+| `default_folder` | boolean | Indicates if this is the default folder. |
+| `visibility` | integer (64-bit) or null | Visibility setting. |
+| `department_ids` | array\<integer\> | Department IDs with access. |
+| `group_ids` | array\<integer\> | Group IDs with access. |
+| `requester_group_ids` | array\<integer\> | Requester group IDs with access. |
+| `manage_by_group_ids` | array\<integer\> | Group IDs that can manage. |
+| `approval_settings` | struct (map) or null | Approval configuration. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
+---
+
+### `canned_responses` object
+
+**Source endpoint**: `GET /api/v2/canned_responses`
+
+**Schema**:
+
+| Column Name | Type | Description |
+|------------|------|-------------|
+| `id` | integer (64-bit) | Unique identifier for the canned response. |
+| `title` | string | Title of the response. |
+| `content` | string or null | Plain text content. |
+| `content_html` | string or null | HTML content. |
+| `folder_id` | integer (64-bit) or null | ID of the folder. |
+| `visibility` | integer (64-bit) or null | Visibility setting. |
+| `group_ids` | array\<integer\> | Group IDs with access. |
+| `attachments` | array\<struct\> | Attached files. |
+| `created_at` | string (ISO 8601 datetime) | Creation timestamp. |
+| `updated_at` | string (ISO 8601 datetime) | Last update timestamp. |
+
 
 ## **Get Object Primary Keys**
 
@@ -936,23 +1037,33 @@ Primary keys are defined **statically** based on resource schemas. There is no d
 | `purchase_orders` | `id` | integer (64-bit) |
 | `service_catalog_items` | `id` | integer (64-bit) |
 | `solutions` | `id` | integer (64-bit) |
-| `time_entries` | `id` (composite with `ticket_id`) | integer (64-bit) |
-| `conversations` | `id` (composite with `ticket_id`) | integer (64-bit) |
-| `tasks` | `id` (composite with `parent_id`, `parent_type`) | integer (64-bit) |
+| `solution_categories` | `id` | integer (64-bit) |
+| `solution_folders` | `id` | integer (64-bit) |
+| `time_entries` | `id`, `ticket_id` (composite) | integer (64-bit) |
+| `conversations` | `id`, `ticket_id` (composite) | integer (64-bit) |
+| `tasks` | `id`, `parent_id`, `parent_type` (composite) | integer (64-bit), string |
 | `ticket_fields` | `id` | integer (64-bit) |
 | `roles` | `id` | integer (64-bit) |
 | `sla_policies` | `id` | integer (64-bit) |
 | `business_hours` | `id` | integer (64-bit) |
 | `announcements` | `id` | integer (64-bit) |
+| `software` | `id` | integer (64-bit) |
+| `canned_responses` | `id` | integer (64-bit) |
 
 
 ## **Object's Ingestion Type**
 
+The connector supports the following ingestion types:
+- **`cdc`**: Incremental loading using `updated_since` parameter with cursor field tracking
+- **`cdc_with_deletes`**: CDC plus support for fetching soft-deleted records via `read_table_deletes`
+- **`snapshot`**: Full table refresh on each sync (no incremental support)
+- **`snapshot` (child)**: Child objects fetched by iterating over parent records
+
 | Object | Ingestion Type | Cursor Field | Rationale |
 |--------|----------------|--------------|-----------|
-| `tickets` | `cdc` | `updated_at` | Has `updated_since` filter and `deleted` flag. |
-| `agents` | `cdc` | `updated_at` | Can be filtered by state; tracks active/inactive. |
-| `requesters` | `cdc` | `updated_at` | Can be filtered by state. |
+| `tickets` | `cdc_with_deletes` | `updated_at` | Has `updated_since` filter and supports `filter=deleted` for soft-deleted records. |
+| `agents` | `cdc` | `updated_at` | Can be filtered by state; tracks active/inactive via `active` field. |
+| `requesters` | `cdc` | `updated_at` | Can be filtered by state via `active` field. |
 | `groups` | `snapshot` | - | Small dataset; no incremental filter. |
 | `departments` | `snapshot` | - | Small dataset; no incremental filter. |
 | `assets` | `cdc` | `updated_at` | Has `updated_at` field. |
@@ -965,15 +1076,19 @@ Primary keys are defined **statically** based on resource schemas. There is no d
 | `contracts` | `snapshot` | - | No incremental filter available. |
 | `purchase_orders` | `cdc` | `updated_at` | Has `updated_at` field. |
 | `service_catalog_items` | `snapshot` | - | Small dataset; no incremental filter. |
-| `solutions` | `cdc` | `updated_at` | Has `updated_at` field. |
-| `time_entries` | `append` | - | Child records; append only. |
-| `conversations` | `append` | - | Child records; append only. |
-| `tasks` | `cdc` | `updated_at` | Can track status changes. |
+| `solutions` | `snapshot` (child) | - | Child of `solution_folders`; fetched by folder_id. |
+| `solution_categories` | `snapshot` | - | Small dataset; configuration data. |
+| `solution_folders` | `snapshot` | - | Small dataset; parent for solutions. |
+| `time_entries` | `snapshot` (child) | - | Child of tickets; fetched by iterating ticket IDs. |
+| `conversations` | `snapshot` (child) | - | Child of tickets; fetched by iterating ticket IDs. |
+| `tasks` | `snapshot` (child_multi_parent) | - | Child of tickets/problems/changes/releases; fetched by iterating parent IDs. |
 | `ticket_fields` | `snapshot` | - | Configuration data. |
 | `roles` | `snapshot` | - | Configuration data. |
 | `sla_policies` | `snapshot` | - | Configuration data. |
 | `business_hours` | `snapshot` | - | Configuration data. |
 | `announcements` | `snapshot` | - | Small dataset. |
+| `software` | `snapshot` | - | Software installations; no incremental filter. |
+| `canned_responses` | `snapshot` | - | Configuration data; pre-defined templates. |
 
 
 ## **Read API for Data Retrieval**
@@ -1070,15 +1185,62 @@ curl -X GET \
 
 ### Handling Deletes
 
-| Object | Delete Handling |
-|--------|-----------------|
-| `tickets` | Use `filter=deleted` or check `deleted` field |
-| `agents` | Check `active` field |
-| `requesters` | Check `active` field |
-| `assets` | Assets can be deleted; check for 404 |
-| `problems` | Check status |
-| `changes` | Check status |
-| `releases` | Check status |
+Freshservice uses soft deletes for tickets via the `deleted` field. The connector's `read_table_deletes` method fetches soft-deleted records.
+
+| Object | Delete Handling | Connector Support |
+|--------|-----------------|-------------------|
+| `tickets` | Use `filter=deleted` to get soft-deleted records | `read_table_deletes` supported |
+| `agents` | Check `active` field (soft deactivation) | Via `active` field in regular read |
+| `requesters` | Check `active` field (soft deactivation) | Via `active` field in regular read |
+| `assets` | Hard delete; check for 404 | Not supported |
+| `problems` | Hard delete; check for 404 | Not supported |
+| `changes` | Hard delete; check for 404 | Not supported |
+| `releases` | Hard delete; check for 404 | Not supported |
+| `sla_policies` | Check `deleted` field | Via `deleted` field in regular read |
+| `service_catalog_items` | Check `deleted` field | Via `deleted` field in regular read |
+
+**List Deleted Tickets**:
+```bash
+curl -X GET \
+  -u "<API_KEY>:X" \
+  "https://<domain>.freshservice.com/api/v2/tickets?filter=deleted&per_page=100"
+```
+
+### Reading Child Objects
+
+Child objects require iterating over parent records to fetch their data:
+
+**Strategy for Single-Parent Children** (`time_entries`, `conversations`, `solutions`):
+1. Fetch all parent IDs (e.g., ticket IDs)
+2. For each parent ID, call the child endpoint
+3. Enrich child records with parent ID field
+
+**Strategy for Multi-Parent Children** (`tasks`):
+1. For each parent type (tickets, problems, changes, releases):
+   - Fetch all parent IDs
+   - For each parent ID, call the tasks endpoint
+   - Enrich task records with `parent_id` and `parent_type`
+
+**Example - List Tasks for a Ticket**:
+```bash
+curl -X GET \
+  -u "<API_KEY>:X" \
+  "https://<domain>.freshservice.com/api/v2/tickets/1/tasks"
+```
+
+**Example - List Tasks for a Change**:
+```bash
+curl -X GET \
+  -u "<API_KEY>:X" \
+  "https://<domain>.freshservice.com/api/v2/changes/1/tasks"
+```
+
+**Example - List Solutions by Folder**:
+```bash
+curl -X GET \
+  -u "<API_KEY>:X" \
+  "https://<domain>.freshservice.com/api/v2/solutions/articles?folder_id=1"
+```
 
 
 ## **Field Type Mapping**
@@ -1114,15 +1276,21 @@ The connector is primarily read-only. Write endpoints are available for:
 
 - **API V1 Deprecation**: API V1 was deprecated on May 31, 2023. Use API V2 only.
 - **Workspace support**: `workspace_id` field only present for multi-workspace accounts.
-- **Custom fields**: Custom field keys are prefixed with `cf_` (e.g., `cf_employee_id`).
-- **Child objects**: `time_entries`, `conversations`, `tasks` require parent ID in endpoint path.
-- **Soft deletes**: Tickets use soft deletes (`deleted` flag); can be restored.
-- **Rate limiting**: Varies by plan; always check response headers.
-- **Pagination limits**: Max 100 records per page.
+- **Custom fields**: Custom field keys are prefixed with `cf_` (e.g., `cf_employee_id`). Stored as `MapType(StringType, StringType)`.
+- **Child objects**: `time_entries`, `conversations`, `tasks`, `solutions` require parent ID in endpoint path.
+- **Multi-parent tasks**: Tasks can belong to tickets, problems, changes, or releases. The connector stores `parent_type` as singular form (e.g., "ticket" not "tickets").
+- **Solutions as children**: Solutions (articles) are fetched per folder using `folder_id` parameter, not standalone.
+- **Soft deletes**: Tickets use soft deletes (`deleted` flag); fetchable via `filter=deleted`. Connector supports `read_table_deletes` for tickets.
+- **Agent/Requester deactivation**: Use `active` field to detect deactivated users (not truly deleted).
+- **SLA and Service Catalog deletes**: Check `deleted` field on records to identify soft-deleted items.
+- **Rate limiting**: Varies by plan; connector handles HTTP 429 with `Retry-After` header.
+- **Pagination limits**: Max 100 records per page; connector defaults to 100.
 - **Query filter limits**: Some queries limited to 30 days of data.
-- **Timestamp format**: All timestamps in ISO 8601 UTC format.
+- **Timestamp format**: All timestamps in ISO 8601 UTC format (e.g., `2026-01-08T12:00:00Z`).
+- **Lookback window**: Connector uses configurable lookback (default 300 seconds) when computing next cursor to handle late-arriving updates.
 - **Null vs empty**: Absent fields return `null`, not empty objects.
 - **HTML content**: `description` fields contain HTML; `description_text` contains plain text.
+- **Ticket fields endpoint**: The endpoint is `/ticket_form_fields`, not `/ticket_fields`.
 
 
 ## **Research Log**
@@ -1137,8 +1305,12 @@ The connector is primarily read-only. Write endpoints are available for:
 | Official Docs | https://api.freshservice.com/#problems | 2026-01-08 | High | Problem schema and endpoints |
 | Official Docs | https://api.freshservice.com/#changes | 2026-01-08 | High | Change schema and endpoints |
 | Official Docs | https://api.freshservice.com/#releases | 2026-01-08 | High | Release schema and endpoints |
+| Official Docs | https://api.freshservice.com/#solutions | 2026-01-08 | High | Solutions categories, folders, articles endpoints |
+| Official Docs | https://api.freshservice.com/#canned-responses | 2026-01-08 | High | Canned responses schema and endpoints |
+| Official Docs | https://api.freshservice.com/#software | 2026-01-08 | High | Software (applications) schema and endpoints |
 | Official Support | https://support.freshservice.com/support/solutions/articles/50000004220 | 2026-01-08 | High | API V1 deprecation notice |
 | Official Support | https://support.freshservice.com/support/solutions/articles/50000000294 | 2026-01-08 | High | How to retrieve ticket fields |
+| Implementation | sources/freshservice/freshservice.py | 2026-01-09 | Highest | Verified schemas, endpoints, ingestion types, delete handling |
 | Web Search | Various | 2026-01-08 | Medium | Cross-verified object lists and schemas |
 
 
@@ -1161,9 +1333,12 @@ When conflicts arise, **official Freshservice API documentation** is treated as 
 ## **Acceptance Checklist**
 
 - [x] All required headings present and in order.
-- [x] All major objects documented with schemas.
+- [x] All major objects documented with schemas (28 tables total).
 - [x] Exactly one authentication method documented (Basic Auth with API Key).
 - [x] Endpoints include params, examples, and pagination details.
-- [x] Incremental strategy defined for applicable objects.
+- [x] Incremental strategy defined for applicable objects (cdc, cdc_with_deletes, snapshot).
+- [x] Delete handling documented for tickets (filter=deleted) and soft-delete fields.
+- [x] Child object patterns documented (single-parent and multi-parent).
 - [x] Research Log completed; Sources include full URLs.
+- [x] Implementation verified against freshservice.py connector code.
 - [x] No unverifiable claims; gaps marked as TBD where applicable.

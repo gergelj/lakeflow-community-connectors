@@ -1,4 +1,5 @@
 {
-    "api_key": "---",
-    "domain": "databricks042"
+    "api_key": "ELqholWZHYK_xkaasQp7",
+    "domain": "databricks042",
+    "externalOptionsAllowList": "per_page,max_pages_per_batch,lookback_seconds,start_date,max_parents,max_parents_per_type,tableConfigs,isDeleteFlow"
 }
